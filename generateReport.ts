@@ -29,7 +29,11 @@ export let users: UserRepository[] = [{
 }, {
     username: 'pricedown',
     repo: 'https://github.com/pricedown/mobagen',
-}];
+}, {
+    username: 'blade-x7',
+    repo: 'https://github.com/blade-x7/mobagen',
+}
+];
 
 interface MoveResult {
   move: Position | null;
