@@ -341,13 +341,21 @@ async function main() {
   // run cmake configure and build the executable target catchthecat
   for (const user of users) {
     console.log("Configuring " + user.username);
-    execSync(`cd repos/${user.username} && cmake -B build -DCPM_SOURCE_CACHE=${depsDir}`, { stdio: 'inherit' });
+    try {
+      execSync(`cd repos/${user.username} && cmake -B build -DCPM_SOURCE_CACHE=${depsDir}`, { stdio: 'inherit' });
+    } catch (error) {
+      console.log(`❌ Configuration failed for ${user.username}: ${error}`);
+    }
   }
 
   console.log('#### Building projects... ####');
   for (const user of users) {
     console.log("Building " + user.username);
-    execSync(`cd repos/${user.username} && cmake --build build --target catchthecat`, { stdio: 'inherit' });
+    try {
+      execSync(`cd repos/${user.username} && cmake --build build --target catchthecat`, { stdio: 'inherit' });
+    } catch (error) {
+      console.log(`❌ Build failed for ${user.username}: ${error}`);
+    }
   }
 
   // leave only the users that have a valid compilation
