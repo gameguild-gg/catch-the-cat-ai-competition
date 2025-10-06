@@ -266,11 +266,11 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
 
   const handleWebArchive = () => {
     const currentUrl = window.location.href;
-    const archiveUrl = `https://web.archive.org/save/${currentUrl}`;
+    const archiveUrl = `https://archive.today/?run=1&url=${encodeURIComponent(currentUrl)}`;
     
     // Show a brief confirmation
     const originalTitle = document.title;
-    document.title = "🏛️ Archiving to Wayback Machine...";
+    document.title = "📸 Archiving to Archive.today...";
     
     // Open the archive URL
     window.open(archiveUrl, '_blank');
@@ -322,8 +322,8 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
           
           {/* Button content */}
           <div className="relative z-10 flex items-center justify-center gap-3">
-            <span className="text-2xl">🏛️</span>
-            <span>Archive to Wayback Machine</span>
+            <span className="text-2xl">📸</span>
+            <span>Archive to Archive.today</span>
             <span className="text-xl">✨</span>
           </div>
         </Button>
@@ -332,8 +332,8 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
         {isArchiveHovered && (
           <div className="absolute -top-16 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap z-20 animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
             <div className="text-center">
-              <div className="font-semibold">🌐 Preserve this moment forever!</div>
-              <div className="text-gray-300">Create a permanent snapshot in the Internet Archive</div>
+              <div className="font-semibold">📸 Capture this page perfectly!</div>
+              <div className="text-gray-300">Archive.today preserves React apps better than Wayback Machine</div>
             </div>
             {/* Arrow */}
             <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>

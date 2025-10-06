@@ -1,7 +1,22 @@
 import { execSync, exec } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { Board, MatchReport, Position, Turn, MoveReport, UserScore, CompetitionReport } from './src/board';
+
+/**
+ * Get the optimal number of CPU cores for parallel compilation
+ * Uses all available cores but caps at a reasonable maximum to avoid overwhelming the system
+ */
+function getOptimalParallelJobs(): number {
+  const cpuCount = os.cpus().length;
+  // Use all cores but cap at 16 to avoid overwhelming the system
+  // Leave one core free for system processes if we have more than 2 cores
+  if (cpuCount <= 2)
+    return cpuCount;
+  else
+    return cpuCount - 1;
+}
 
 export class UserRepository {
   username: string = '';
@@ -340,6 +355,10 @@ async function main() {
     fs.mkdirSync(depsDir, { recursive: true });
   }
 
+  // Get optimal number of parallel jobs for compilation
+  const parallelJobs = getOptimalParallelJobs();
+  console.log(`Using ${parallelJobs} parallel jobs for compilation (detected ${os.cpus().length} CPU cores)`);
+
   console.log('#### Configuring projects... ####');
   // run cmake configure and build the executable target catchthecat
   for (const user of users) {
@@ -355,7 +374,7 @@ async function main() {
   for (const user of users) {
     console.log("Building " + user.username);
     try {
-      execSync(`cd repos/${user.username} && cmake --build build --target catchthecat`, { stdio: 'inherit' });
+      execSync(`cd repos/${user.username} && cmake --build build --target catchthecat --parallel ${parallelJobs}`, { stdio: 'inherit' });
     } catch (error) {
       console.log(`❌ Build failed for ${user.username}: ${error}`);
     }
