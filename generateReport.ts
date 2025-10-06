@@ -397,11 +397,6 @@ async function main() {
   console.log('#### Competition completed! ####');
   console.log('Results saved to:');
   console.log('- public/competition_report.json (Machine-readable data for React)');
-  
-  console.log('\n🏆 Final Leaderboard:');
-  userScores.forEach((user, index) => {
-    console.log(`${index + 1}. ${user.username}: ${user.totalScore.toFixed(3)} points`);
-  });
 }
 
 main().then(() => {
