@@ -14,21 +14,21 @@ export let users: UserRepository[] = [{
 }, {
     username: 'BrandonCherry166',
     repo: 'https://github.com/BrandonCherry166/mobagen',
-// }, {
-//     username: 'ZackOlson',
-//     repo: 'https://github.com/ZackOlson/mobagen', // needs sync
-// }, {
-//     username: 'Fable-Spagat',
-//     repo: 'https://github.com/Fable-Spagat/mobagen', // needs sync
-// }, {
-//     username: 'StevenSpyro',
-//     repo: 'https://github.com/StevenSpyro/mobagen',
-// }, {
-//     username: 'Jingles5',
-//     repo: 'https://github.com/Jingles5/mobagen',
-// }, {
-//     username: 'pricedown',
-//     repo: 'https://github.com/pricedown/mobagen', // needs sync
+}, {
+    username: 'ZackOlson',
+    repo: 'https://github.com/ZackOlson/mobagen',
+}, {
+    username: 'Fable-Spagat',
+    repo: 'https://github.com/Fable-Spagat/mobagen',
+}, {
+    username: 'StevenSpyro',
+    repo: 'https://github.com/StevenSpyro/mobagen',
+}, {
+    username: 'Jingles5',
+    repo: 'https://github.com/Jingles5/mobagen',
+}, {
+    username: 'pricedown',
+    repo: 'https://github.com/pricedown/mobagen',
 }];
 
 interface MoveResult {

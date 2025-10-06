@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { CompetitionReport, MatchReport, UserScore } from '../board';
+import { CompetitionReport, MatchReport } from '../board';
 
 interface CompetitionReportProps {
   reportData?: CompetitionReport;
