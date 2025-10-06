@@ -3,6 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Select } from './ui/select';
 import { CompetitionReport, MatchReport } from '../board';
 import competitionReportData from '../competition_report.json';
 
@@ -200,8 +202,11 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
   const [report, setReport] = useState<CompetitionReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showMatches, setShowMatches] = useState(false);
   const [isArchiveHovered, setIsArchiveHovered] = useState(false);
+  
+  // Filter state
+  const [usernameFilter, setUsernameFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'cat' | 'catcher'>('all');
 
   useEffect(() => {
     if (!reportData) {
@@ -263,6 +268,26 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
   }
 
   const sortedScores = [...report.highScores].sort((a, b) => b.totalScore - a.totalScore);
+
+  // Filter matches based on username and role
+  const filteredMatches = report.matches.filter(match => {
+    // Username filter: check if username appears in either cat or catcher role
+    const usernameMatch = usernameFilter === '' || 
+      match.cat.toLowerCase().includes(usernameFilter.toLowerCase()) ||
+      match.catcher.toLowerCase().includes(usernameFilter.toLowerCase());
+    
+    // Role filter: if a specific role is selected, only show matches where the username appears in that role
+    let roleMatch = true;
+    if (roleFilter !== 'all' && usernameFilter !== '') {
+      if (roleFilter === 'cat') {
+        roleMatch = match.cat.toLowerCase().includes(usernameFilter.toLowerCase());
+      } else if (roleFilter === 'catcher') {
+        roleMatch = match.catcher.toLowerCase().includes(usernameFilter.toLowerCase());
+      }
+    }
+    
+    return usernameMatch && roleMatch;
+  });
 
   const handleWebArchive = () => {
     const currentUrl = window.location.href;
@@ -394,26 +419,67 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
         </CardContent>
       </Card>
 
-      {/* Match Details Toggle */}
+      {/* Match Details */}
       <Card>
         <CardHeader>
           <CardTitle>📊 Match Details</CardTitle>
           <CardDescription>
-            View detailed results from all matches
+            View detailed results from all matches ({filteredMatches.length} of {report.matches.length} matches shown)
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button 
-            onClick={() => setShowMatches(!showMatches)}
-            variant="outline"
-            className="mb-4"
-          >
-            {showMatches ? 'Hide' : 'Show'} Match Details
-          </Button>
+          {/* Filter Controls */}
+          <div className="mb-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label htmlFor="username-filter" className="text-sm font-medium">
+                  Filter by Username
+                </label>
+                <Input
+                   id="username-filter"
+                   placeholder="Enter username to filter..."
+                   value={usernameFilter}
+                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsernameFilter(e.target.value)}
+                   className="w-full"
+                 />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="role-filter" className="text-sm font-medium">
+                  Filter by Role
+                </label>
+                <Select
+                   id="role-filter"
+                   value={roleFilter}
+                   onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRoleFilter(e.target.value as 'all' | 'cat' | 'catcher')}
+                   className="w-full"
+                 >
+                  <option value="all">All Roles</option>
+                  <option value="cat">Cat Only</option>
+                  <option value="catcher">Catcher Only</option>
+                </Select>
+              </div>
+            </div>
+            {(usernameFilter || roleFilter !== 'all') && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Showing {filteredMatches.length} of {report.matches.length} matches
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setUsernameFilter('');
+                    setRoleFilter('all');
+                  }}
+                >
+                  Clear Filters
+                </Button>
+              </div>
+            )}
+          </div>
 
-          {showMatches && (
-            <div className="space-y-4">
-              {report.matches.map((match, index) => (
+          <div className="space-y-4">
+            {filteredMatches.map((match, index) => (
                 <Card key={index} className="border-l-4 border-l-primary">
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
@@ -462,7 +528,6 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
                 </Card>
               ))}
             </div>
-          )}
         </CardContent>
       </Card>
     </div>
