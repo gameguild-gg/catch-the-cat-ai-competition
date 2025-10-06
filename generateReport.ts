@@ -386,7 +386,7 @@ async function main() {
   console.log('#### Generating random boards... ####');
   // generate 1 random boards
   let initialStates: string[] = [];
-  for (let i = 0; i < 1; i++) {
+  for (let i = 0; i < 10; i++) {
     let board = Board.generateRandomBoard(21);
     initialStates.push(board);
   }
