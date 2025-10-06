@@ -6,8 +6,8 @@ on:
   pull_request:
     branches: [ main, master ]
   schedule:
-    # Run daily at 2 AM UTC
-    - cron: '0 2 * * *'
+    # Run every 4 hours
+    - cron: '0 */4 * * *'
   workflow_dispatch: # Allow manual triggering
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
