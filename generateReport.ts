@@ -44,7 +44,7 @@ interface ParseResult {
 
 async function requestMove(board: Board, user: UserRepository): Promise<MoveResult> {
   const startTime = Date.now();
-  const timeout = 2000; // 2 seconds timeout
+  const timeout = 2000; // 2 second timeout
   
   try {
     // Prepare the board string with cat position marked as 'C'
@@ -235,8 +235,7 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
       moveReport.move = moveResult.move;
       moveReport.board = board.getBoardString();
       
-      // Calculate time penalty (if > 100ms)
-      const timePenalty = Math.max(0, moveResult.time - 100) / 1000; // Convert to seconds
+      const timePenalty = moveResult.time / 1000; // Convert to seconds
       if (board.turn === Turn.Catcher) { // Turn switched after move
         report.catTimeScore += timePenalty;
       } else {
