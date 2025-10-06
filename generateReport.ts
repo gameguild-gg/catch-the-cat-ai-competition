@@ -392,11 +392,11 @@ async function main() {
   competitionReport.highScores = userScores;
   
   // Generate JSON report for further analysis
-  fs.writeFileSync('public/competition_report.json', JSON.stringify(competitionReport, null, 2));
+  fs.writeFileSync('src/competition_report.json', JSON.stringify(competitionReport, null, 2));
   
   console.log('#### Competition completed! ####');
   console.log('Results saved to:');
-  console.log('- public/competition_report.json (Machine-readable data for React)');
+  console.log('- src/competition_report.json (Machine-readable data for React)');
 }
 
 main().then(() => {

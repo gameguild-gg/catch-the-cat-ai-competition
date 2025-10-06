@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { CompetitionReport, MatchReport } from '../board';
+import competitionReportData from '../competition_report.json';
 
 interface CompetitionReportProps {
   reportData?: CompetitionReport;
@@ -211,12 +212,8 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('/competition_report.json');
-      if (!response.ok) {
-        throw new Error('Failed to load competition report');
-      }
-      const data = await response.json();
-      setReport(data);
+      // Use the imported JSON data directly
+      setReport(competitionReportData as CompetitionReport);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load report');
     } finally {

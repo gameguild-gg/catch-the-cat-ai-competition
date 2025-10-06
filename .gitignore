@@ -31,4 +31,6 @@ yarn-error.log*
 # IDEs and editors
 .idea/
 .vscode/
-public/competition_report.json
+
+# Generated files
+src/competition_report.json
