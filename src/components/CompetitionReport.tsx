@@ -201,6 +201,7 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showMatches, setShowMatches] = useState(false);
+  const [isArchiveHovered, setIsArchiveHovered] = useState(false);
 
   useEffect(() => {
     if (!reportData) {
@@ -263,6 +264,23 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
 
   const sortedScores = [...report.highScores].sort((a, b) => b.totalScore - a.totalScore);
 
+  const handleWebArchive = () => {
+    const currentUrl = window.location.href;
+    const archiveUrl = `https://web.archive.org/save/${currentUrl}`;
+    
+    // Show a brief confirmation
+    const originalTitle = document.title;
+    document.title = "🏛️ Archiving to Wayback Machine...";
+    
+    // Open the archive URL
+    window.open(archiveUrl, '_blank');
+    
+    // Restore title after a moment
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 3000);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -290,6 +308,38 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
           </div>
         </CardContent>
       </Card>
+
+      {/* Web Archive Button */}
+      <div className="relative">
+        <Button 
+          onClick={handleWebArchive}
+          onMouseEnter={() => setIsArchiveHovered(true)}
+          onMouseLeave={() => setIsArchiveHovered(false)}
+          className="w-full h-16 text-lg font-semibold bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 hover:from-purple-700 hover:via-blue-700 hover:to-indigo-700 text-white border-0 shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-300 ease-out relative overflow-hidden group"
+        >
+          {/* Shine effect */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out"></div>
+          
+          {/* Button content */}
+          <div className="relative z-10 flex items-center justify-center gap-3">
+            <span className="text-2xl">🏛️</span>
+            <span>Archive to Wayback Machine</span>
+            <span className="text-xl">✨</span>
+          </div>
+        </Button>
+        
+        {/* Hover message */}
+        {isArchiveHovered && (
+          <div className="absolute -top-16 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap z-20 animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
+            <div className="text-center">
+              <div className="font-semibold">🌐 Preserve this moment forever!</div>
+              <div className="text-gray-300">Create a permanent snapshot in the Internet Archive</div>
+            </div>
+            {/* Arrow */}
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+          </div>
+        )}
+      </div>
 
       {/* Leaderboard */}
       <Card>
