@@ -90,27 +90,6 @@ interface CompetitionReportProps {
   reportData?: CompetitionReport;
 }
 
-// Helper function to find cat position from board string
-function findCatPositionFromBoard(boardString: string, side: number = 21): { x: number; y: number } {
-  const sideSideOver2 = Math.floor(side / 2);
-  
-  // Helper function to convert index to position
-  const indexToPosition = (index: number): { x: number; y: number } => {
-    const y = Math.floor(index / side) - sideSideOver2;
-    const x = (index % side) - sideSideOver2;
-    return { x, y };
-  };
-  
-  // Find 'C' in the board string
-  const catIndex = boardString.indexOf('C');
-  if (catIndex !== -1) {
-    return indexToPosition(catIndex);
-  }
-  
-  // If no 'C' found, return center position as fallback
-  return { x: 0, y: 0 };
-}
-
 // Helper function to format board in hexagonal layout
 function formatHexagonalBoard(boardString: string, catPosition: { x: number; y: number }, side: number = 21): string {
   let formattedBoard = '';

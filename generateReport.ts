@@ -2,7 +2,10 @@ import { execSync, exec } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { Board, MatchReport, Position, Turn, MoveReport, UserScore, CompetitionReport } from './src/board';
+import { Board, MatchReport, Position, Turn, MoveReport, UserScore, CompetitionReport } from './src/board.ts';
+
+// Track active child processes for cleanup
+
 
 /**
  * Get the optimal number of CPU cores for parallel compilation
@@ -50,30 +53,29 @@ export let users: UserRepository[] = [{
 }, {
     username: 'DPS2004',
     repo: 'https://github.com/DPS2004/mobagen',
-}, 
-{
+}, {
     username: "Nominal9977",
     repo: "https://github.com/Nominal9977/mobagen"
-},
-{ 
+},{ 
     username: "AndrewGenualdo",
     repo: "https://github.com/AndrewGenualdo/ai4games-mobagen"
-}, 
-{
+}, {
     username:  "TOAG21",
     repo: "https://github.com/TOAG21/mobagen"
-},
-{
+},{
     username: "AnderzBruh",
     repo: "https://github.com/AnderzBruh/mobagen"
-},
-{ username: "noahfreedz",
+},{ 
+  username: "noahfreedz",
   repo: "https://github.com/noahfreedz/AI-4-G-MOBAGEN"
 },
 { username: "Ceichert31",
   repo: "https://github.com/Ceichert31/GameAI-Interactive"
-}
-];
+},
+{ 
+  username: "KFireheart",
+  repo: "https://github.com/KFireheart/AI-For-Games-mobagen"
+}];
 
 interface MoveResult {
   move: Position | null;
@@ -100,15 +102,36 @@ async function requestMove(board: Board, user: UserRepository): Promise<MoveResu
     const command = `${executablePath} --headless --turn ${turn} --size ${board.side} --board "${boardString}"`;
     
     return new Promise((resolve) => {
-      const child = exec(command, { timeout }, (error, stdout, stderr) => {
+      let resolved = false;
+      let timeoutHandle: NodeJS.Timeout | null = null;
+      
+      const cleanup = () => {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = null;
+        }
+      };
+      
+      const safeResolve = (result: MoveResult) => {
+        if (!resolved) {
+          resolved = true;
+          cleanup();
+          resolve(result);
+        }
+      };
+      
+      const child = exec(command, { 
+        timeout,
+        killSignal: 'SIGKILL' // Use SIGKILL to ensure process termination
+      }, (error, stdout, stderr) => {
         const endTime = Date.now();
         const executionTime = endTime - startTime;
         
         if (error) {
-           if (error.signal === 'SIGTERM' || error.message.includes('timeout')) {
-             resolve({ move: null, time: timeout, error: 'Timeout exceeded' });
+           if (error.signal === 'SIGTERM' || error.signal === 'SIGKILL' || error.message.includes('timeout')) {
+             safeResolve({ move: null, time: timeout, error: 'Timeout exceeded' });
            } else {
-             resolve({ move: null, time: executionTime, error: error.message });
+             safeResolve({ move: null, time: executionTime, error: error.message });
            }
            return;
          }
@@ -117,21 +140,32 @@ async function requestMove(board: Board, user: UserRepository): Promise<MoveResu
           // Parse the output to extract both the move and processing time
           // The C++ code now prints the board state after the move, followed by processing time
           const result = parseMoveAndTimeFromOutput(stdout, board);
-          resolve({ 
+          safeResolve({ 
             move: result.move, 
             time: result.processingTime // Use processing time from C++ program
           });
         } catch (parseError) {
-          resolve({ move: null, time: executionTime, error: `Parse error: ${parseError instanceof Error ? parseError.message : String(parseError)}` });
+          safeResolve({ move: null, time: executionTime, error: `Parse error: ${parseError instanceof Error ? parseError.message : String(parseError)}` });
         }
       });
       
-      // Kill the process if it takes too long
-      setTimeout(() => {
-        if (!child.killed) {
-          child.kill();
-        }
-      }, timeout);
+      // Set up timeout to kill process immediately
+       timeoutHandle = setTimeout(() => {
+         if (!resolved && child && !child.killed) {
+           // Kill the process immediately with SIGKILL for timeout
+           try {
+             child.kill('SIGKILL');
+           } catch (error) {
+             console.warn(`Failed to kill timed-out process: ${error}`);
+           }
+           safeResolve({ move: null, time: timeout, error: 'Timeout exceeded' });
+         }
+       }, timeout);
+       
+       // Handle process errors
+       child.on('error', (err) => {
+         safeResolve({ move: null, time: Date.now() - startTime, error: `Process error: ${err.message}` });
+       });
     });
   } catch (error) {
     const endTime = Date.now();
@@ -182,45 +216,7 @@ function parseMoveAndTimeFromOutput(output: string, originalBoard: Board): Parse
   return { move, processingTime };
 }
 
-function parseMoveFromOutput(output: string, originalBoard: Board): Position {
-  // Legacy function for backward compatibility
-  const result = parseMoveAndTimeFromOutput(output, originalBoard);
-  return result.move;
-}
 
-function parseBoardFromLines(lines: string[], side: number): string {
-  const board = new Array(side * side).fill('.');
-  let boardIndex = 0;
-  
-  for (let y = 0; y < side; y++) {
-    const line = lines[y] || '';
-    const chars = line.replace(/\s+/g, ''); // Remove spaces
-    
-    for (let x = 0; x < side; x++) {
-      if (x < chars.length) {
-        const char = chars[x];
-        if (char === '#' || char === 'C') {
-          board[boardIndex] = char === 'C' ? '.' : '#'; // Cat position is handled separately
-        }
-      }
-      boardIndex++;
-    }
-  }
-  
-  return board.join('');
-}
-
-function findCatPosition(boardString: string, side: number): Position {
-  for (let i = 0; i < boardString.length; i++) {
-    if (boardString[i] === 'C') {
-      const sideOver2 = Math.floor(side / 2);
-      const y = Math.floor(i / side) - sideOver2;
-      const x = (i % side) - sideOver2;
-      return new Position(x, y);
-    }
-  }
-  return new Position(0, 0); // Default to center
-}
 
 function calculateTimePenalty(timeMs: number): number {
   // Square root creates diminishing returns - being 2x slower isn't 2x worse
