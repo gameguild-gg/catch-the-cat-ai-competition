@@ -6,6 +6,7 @@ import { Button } from './ui/button';
 import { Select } from './ui/select';
 import { CompetitionReport, MatchReport, Board, Position, Turn } from '../board';
 import competitionReportData from '../competition_report.json';
+import { BUILD_TIMESTAMP } from '../buildTimestamp';
 
 /**
  * Decompress board string from run-length encoding
@@ -426,6 +427,9 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
           <CardDescription>
             Competition results from the latest run
           </CardDescription>
+          <div className="text-sm text-muted-foreground mt-2">
+            📅 Generated: {BUILD_TIMESTAMP.buildTimeFormatted}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
