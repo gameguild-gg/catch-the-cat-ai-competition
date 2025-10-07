@@ -4,8 +4,87 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Select } from './ui/select';
-import { CompetitionReport, MatchReport } from '../board';
+import { CompetitionReport, MatchReport, Board, Position, Turn } from '../board';
 import competitionReportData from '../competition_report.json';
+
+/**
+ * Decompress board string from run-length encoding
+ * Example: "3.1#2." becomes "...#.."
+ */
+function decompressBoard(compressed: string): string {
+  if (!compressed) return '';
+  
+  let decompressed = '';
+  let i = 0;
+  
+  while (i < compressed.length) {
+    let count = '';
+    
+    // Read digits for count
+    while (i < compressed.length && /\d/.test(compressed[i])) {
+      count += compressed[i];
+      i++;
+    }
+    
+    // If no count was found, default to 1
+    const repeatCount = count ? parseInt(count) : 1;
+    
+    // Get the character to repeat
+    if (i < compressed.length) {
+      const char = compressed[i];
+      decompressed += char.repeat(repeatCount);
+      i++;
+    }
+  }
+  
+  return decompressed;
+}
+
+/**
+ * Convert optimized competition report back to original format
+ */
+function deoptimizeCompetitionReport(optimizedData: any): CompetitionReport {
+  const users = optimizedData.users || [];
+  
+  // Convert matches back to original format
+  const matches = optimizedData.matches.map((match: any) => ({
+    moves: match.m.map((move: any) => ({
+      username: users[move.u],
+      turn: move.t === 0 ? Turn.Cat : Turn.Catcher,
+      time: move.tm,
+      move: { x: move.mv.x, y: move.mv.y },
+      ...(move.e && { error: move.e })
+    })),
+    cat: users[match.c],
+    catcher: users[match.ch],
+    catMoveScore: match.cms,
+    catcherMoveScore: match.chs,
+    catTimeScore: match.cts,
+    catcherTimeScore: match.chts,
+    initialState: {
+      board: decompressBoard(match.init.b),
+      catPosition: { x: match.init.cp.x, y: match.init.cp.y },
+      turn: match.init.t === 0 ? Turn.Cat : Turn.Catcher
+    }
+  }));
+
+  // Convert high scores back to original format
+  const highScores = optimizedData.highScores.map((score: any) => ({
+    username: users[score.u],
+    catMoveScore: score.cms,
+    catcherMoveScore: score.chs,
+    catTimeScore: score.cts,
+    catcherTimeScore: score.chts,
+    catScore: score.cs,
+    catcherScore: score.chs2,
+    totalScore: score.ts
+  }));
+
+  return {
+    matches,
+    highScores
+  };
+}
 
 interface CompetitionReportProps {
   reportData?: CompetitionReport;
@@ -78,6 +157,35 @@ function formatHexagonalBoard(boardString: string, catPosition: { x: number; y: 
   return formattedBoard;
 }
 
+// Function to reconstruct board state at a specific move index
+function reconstructBoardState(match: MatchReport, moveIndex: number): { board: string; catPosition: Position } {
+  // Start with initial state
+  const board = new Board(
+    match.initialState.board,
+    new Position(match.initialState.catPosition.x, match.initialState.catPosition.y),
+    match.cat,
+    match.catcher
+  );
+  
+  // Apply moves up to the specified index
+  for (let i = 0; i <= moveIndex && i < match.moves.length; i++) {
+    const move = match.moves[i];
+    if (move.move && !move.error) {
+      try {
+        board.move(new Position(move.move.x, move.move.y));
+      } catch (error) {
+        // If move fails, stop here
+        break;
+      }
+    }
+  }
+  
+  return {
+    board: board.getBoardString(),
+    catPosition: board.catPosition
+  };
+}
+
 interface BoardViewerProps {
   match: MatchReport;
 }
@@ -94,14 +202,17 @@ function BoardViewer({ match }: BoardViewerProps) {
       moveInfo: null,
       isInitial: true
     },
-    ...match.moves.map((move, index) => ({
-      board: move.board,
-      catPosition: findCatPositionFromBoard(move.board),
-      turn: move.turn,
-      moveInfo: move,
-      isInitial: false,
-      moveNumber: index + 1
-    }))
+    ...match.moves.map((move, index) => {
+      const reconstructed = reconstructBoardState(match, index);
+      return {
+        board: reconstructed.board,
+        catPosition: reconstructed.catPosition,
+        turn: move.turn,
+        moveInfo: move,
+        isInitial: false,
+        moveNumber: index + 1
+      };
+    })
   ];
 
   const currentState = boardStates[currentMoveIndex + 1]; // +1 because -1 index maps to 0
@@ -123,8 +234,8 @@ function BoardViewer({ match }: BoardViewerProps) {
   return (
     <div className="space-y-4">
       {/* Board State Info */}
-      <div className="flex justify-between items-center">
-        <div className="flex items-center space-x-4">
+      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
           <div className="text-sm font-medium">
              {currentState.isInitial ? (
                <span>Initial Board State</span>
@@ -133,7 +244,7 @@ function BoardViewer({ match }: BoardViewerProps) {
              )}
            </div>
           {currentState.moveInfo && (
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant={currentState.turn === 'cat' ? 'default' : 'secondary'}>
                 {currentState.turn}
               </Badge>
@@ -153,16 +264,17 @@ function BoardViewer({ match }: BoardViewerProps) {
         </div>
         
         {/* Navigation Controls */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center justify-center gap-2 flex-shrink-0">
           <Button
             variant="outline"
             size="sm"
             onClick={goToPrevious}
             disabled={!canGoPrevious}
+            className="flex-shrink-0"
           >
             ← Previous
           </Button>
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm text-muted-foreground whitespace-nowrap px-2 font-mono">
             {currentMoveIndex + 2} / {boardStates.length}
           </span>
           <Button
@@ -170,6 +282,7 @@ function BoardViewer({ match }: BoardViewerProps) {
             size="sm"
             onClick={goToNext}
             disabled={!canGoNext}
+            className="flex-shrink-0"
           >
             Next →
           </Button>
@@ -184,10 +297,10 @@ function BoardViewer({ match }: BoardViewerProps) {
       )}
 
       {/* Board Display */}
-      <div className="bg-muted p-4 rounded border">
+      <div className="bg-muted p-2 sm:p-4 rounded border overflow-x-auto">
         <pre 
-          className="text-xs font-mono whitespace-pre text-center"
-          style={{ fontSize: '10px', lineHeight: '1.2' }}
+          className="text-xs font-mono whitespace-pre text-center min-w-fit"
+          style={{ fontSize: 'clamp(8px, 2vw, 10px)', lineHeight: '1.2' }}
           dangerouslySetInnerHTML={{
             __html: formatHexagonalBoard(currentState.board, currentState.catPosition)
           }}
@@ -217,8 +330,17 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
     try {
       setLoading(true);
       setError(null);
-      // Use the imported JSON data directly
-      setReport(competitionReportData as CompetitionReport);
+      
+      // Check if the data is in optimized format (has 'users' array)
+      const rawData = competitionReportData as any;
+      if (rawData.users && Array.isArray(rawData.users)) {
+        // Decompress optimized format
+        const decompressedReport = deoptimizeCompetitionReport(rawData);
+        setReport(decompressedReport);
+      } else {
+        // Data is already in original format
+        setReport(rawData as CompetitionReport);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load report');
     } finally {
@@ -385,18 +507,19 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-16">Rank</TableHead>
-                <TableHead>Player</TableHead>
-                <TableHead className="text-right">Total Score</TableHead>
-                <TableHead className="text-right">Cat Score</TableHead>
-                <TableHead className="text-right">Catcher Score</TableHead>
-                <TableHead className="text-right">Cat Time</TableHead>
-                <TableHead className="text-right">Catcher Time</TableHead>
-              </TableRow>
-            </TableHeader>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-16">Rank</TableHead>
+                  <TableHead className="min-w-[120px]">Player</TableHead>
+                  <TableHead className="text-right min-w-[100px]">Total Score</TableHead>
+                  <TableHead className="text-right min-w-[90px]">Cat Score</TableHead>
+                  <TableHead className="text-right min-w-[100px]">Catcher Score</TableHead>
+                  <TableHead className="text-right min-w-[80px]">Cat Time</TableHead>
+                  <TableHead className="text-right min-w-[100px]">Catcher Time</TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {sortedScores.slice(0, 3).map((score, index) => (
                 <TableRow key={score.username}>
@@ -417,15 +540,16 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
                     {score.catcherScore.toFixed(3)}
                   </TableCell>
                   <TableCell className="text-right text-destructive">
-                    -{score.catTimeScore.toFixed(3)}
+                    -{score.catTimeScore.toPrecision(3)}
                   </TableCell>
                   <TableCell className="text-right text-destructive">
-                    -{score.catcherTimeScore.toFixed(3)}
+                    -{score.catcherTimeScore.toPrecision(3)}
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -515,7 +639,8 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
                         </div>
                         {(match.catTimeScore > 0 || match.catcherTimeScore > 0) && (
                           <div className="text-xs text-destructive">
-                            Time penalties: Cat -{match.catTimeScore} • Catcher -{match.catcherTimeScore}
+                            Time penalties:<br />
+                            Cat -{match.catTimeScore.toPrecision(3)} • Catcher -{match.catcherTimeScore.toPrecision(3)}
                           </div>
                         )}
                       </div>

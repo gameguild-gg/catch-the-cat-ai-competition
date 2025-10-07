@@ -50,6 +50,28 @@ export let users: UserRepository[] = [{
 }, {
     username: 'DPS2004',
     repo: 'https://github.com/DPS2004/mobagen',
+}, 
+{
+    username: "Nominal9977",
+    repo: "https://github.com/Nominal9977/mobagen"
+},
+{ 
+    username: "AndrewGenualdo",
+    repo: "https://github.com/AndrewGenualdo/ai4games-mobagen"
+}, 
+{
+    username:  "TOAG21",
+    repo: "https://github.com/TOAG21/mobagen"
+},
+{
+    username: "AnderzBruh",
+    repo: "https://github.com/AnderzBruh/mobagen"
+},
+{ username: "noahfreedz",
+  repo: "https://github.com/noahfreedz/AI-4-G-MOBAGEN"
+},
+{ username: "Ceichert31",
+  repo: "https://github.com/Ceichert31/GameAI-Interactive"
 }
 ];
 
@@ -130,6 +152,10 @@ function parseMoveAndTimeFromOutput(output: string, originalBoard: Board): Parse
   
   // Find the last two non-empty lines
   const nonEmptyLines = lines.filter(line => line.trim()).reverse();
+  
+  if (nonEmptyLines.length === 0) {
+    throw new Error('No move was returned - agent produced no output');
+  }
   
   if (nonEmptyLines.length < 2) {
     throw new Error('Expected at least 2 lines in output (time and move)');
@@ -233,7 +259,6 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
     moveReport.username = currentUser.username;
     moveReport.turn = board.turn;
     moveReport.time = moveResult.time;
-    moveReport.board = board.getBoardString();
     
     if (moveResult.error || !moveResult.move) {
       // Player made an invalid move or timed out
@@ -254,11 +279,7 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
     }
     
     try {
-      // Validate and execute the move
-      if (!board.validateMove(moveResult.move)) {
-        throw new Error(`Invalid move: (${moveResult.move.x}, ${moveResult.move.y})`);
-      }
-      
+      // Calculate time penalty before executing the move
       const timePenalty = calculateTimePenalty(moveResult.time);
       // Assign time penalty to the current player BEFORE the turn switches
       if (board.turn === Turn.Cat) {
@@ -267,9 +288,9 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
         report.catcherTimeScore += timePenalty;
       }
       
+      // Execute the move (board.move() will validate and throw error if invalid)
       board.move(moveResult.move);
       moveReport.move = moveResult.move;
-      moveReport.board = board.getBoardString();
       
       moveCount++;
       console.log(`${currentUser.username} (${moveReport.turn}) moved to (${moveResult.move.x}, ${moveResult.move.y}) in ${moveResult.time}ms`);
@@ -322,8 +343,7 @@ function calculateUserScores(matchReports: MatchReport[]): UserScore[] {
     const catcherUser = userScores.get(match.catcher)!;
     
     // Normalize scores by board size
-    const maxScore = match.moves.length > 0 ? 
-      Math.sqrt(match.moves[0].board.length) * Math.sqrt(match.moves[0].board.length) : 441; // 21*21 default
+    const maxScore = match.initialState.board ? match.initialState.board.length : 441; // 21*21 default
     
     const normalizedCatMoveScore = match.catMoveScore / maxScore;
     const normalizedCatcherMoveScore = match.catcherMoveScore / maxScore;
@@ -344,6 +364,89 @@ function calculateUserScores(matchReports: MatchReport[]): UserScore[] {
   
   // Sort by total score (descending)
   return Array.from(userScores.values()).sort((a, b) => b.totalScore - a.totalScore);
+}
+
+/**
+ * Compress board string using run-length encoding
+ * Example: "...#.." becomes "3.1#2."
+ */
+function compressBoard(board: string): string {
+  if (!board) return '';
+  
+  let compressed = '';
+  let currentChar = board[0];
+  let count = 1;
+  
+  for (let i = 1; i < board.length; i++) {
+    if (board[i] === currentChar) {
+      count++;
+    } else {
+      compressed += count > 1 ? count + currentChar : currentChar;
+      currentChar = board[i];
+      count = 1;
+    }
+  }
+  
+  // Add the last group
+  compressed += count > 1 ? count + currentChar : currentChar;
+  return compressed;
+}
+
+/**
+ * Optimize the competition report to reduce JSON size
+ */
+function optimizeCompetitionReport(report: CompetitionReport): any {
+  // Create username mapping
+  const allUsernames = Array.from(new Set([
+    ...report.matches.map(match => match.cat),
+    ...report.matches.map(match => match.catcher),
+    ...report.matches.flatMap(match => match.moves.map(move => move.username))
+  ]));
+  
+  const userMap = new Map<string, number>();
+  allUsernames.forEach((username, index) => {
+    userMap.set(username, index);
+  });
+
+  // Optimize matches
+  const optimizedMatches = report.matches.map(match => ({
+    m: match.moves.map(move => ({
+      u: userMap.get(move.username), // username index
+      t: move.turn === Turn.Cat ? 0 : 1, // turn as number
+      tm: move.time, // time
+      mv: { x: move.move.x, y: move.move.y }, // move
+      ...(move.error && { e: move.error }) // error (only if exists)
+    })),
+    c: userMap.get(match.cat), // cat username index
+    ch: userMap.get(match.catcher), // catcher username index
+    cms: match.catMoveScore,
+    chs: match.catcherMoveScore,
+    cts: match.catTimeScore,
+    chts: match.catcherTimeScore,
+    init: {
+      b: compressBoard(match.initialState.board), // compressed board
+      cp: { x: match.initialState.catPosition.x, y: match.initialState.catPosition.y },
+      t: match.initialState.turn === Turn.Cat ? 0 : 1
+    }
+  }));
+
+  // Optimize high scores
+  const optimizedHighScores = report.highScores.map(score => ({
+    u: userMap.get(score.username),
+    cms: score.catMoveScore,
+    chs: score.catcherMoveScore,
+    cts: score.catTimeScore,
+    chts: score.catcherTimeScore,
+    cs: score.catScore,
+    chs2: score.catcherScore,
+    ts: score.totalScore
+  }));
+
+  return {
+    users: allUsernames, // username mapping
+    matches: optimizedMatches,
+    highScores: optimizedHighScores
+  };
 }
 
 async function main() {
@@ -395,7 +498,7 @@ async function main() {
   console.log('#### Generating random boards... ####');
   // generate 1 random boards
   let initialStates: string[] = [];
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 2; i++) {
     let board = Board.generateRandomBoard(21);
     initialStates.push(board);
   }
@@ -423,8 +526,9 @@ async function main() {
   competitionReport.matches = matchReports;
   competitionReport.highScores = userScores;
   
-  // Generate JSON report for further analysis
-  fs.writeFileSync('src/competition_report.json', JSON.stringify(competitionReport, null, 2));
+  // Generate optimized JSON report for further analysis
+  const optimizedReport = optimizeCompetitionReport(competitionReport);
+  fs.writeFileSync('src/competition_report.json', JSON.stringify(optimizedReport));
   
   console.log('#### Competition completed! ####');
   console.log('Results saved to:');

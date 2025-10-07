@@ -79,8 +79,7 @@ export class MoveReport {
   turn: Turn = Turn.Cat; // which player made the move
   time: number = 0; // how much time the agent spent on the move, in milliseconds
   move: Position = new Position(); // move applied by the agent cat or catcher
-  board: string = ''; // how the board looked like after the move
-  error: string = ''; // error message if any
+  error?: string; // error message if any
 }
 
 export class Board {
