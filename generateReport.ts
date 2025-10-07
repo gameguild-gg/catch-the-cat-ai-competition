@@ -197,7 +197,9 @@ function findCatPosition(boardString: string, side: number): Position {
 }
 
 function calculateTimePenalty(timeMs: number): number {
-  return timeMs / 100000;
+  // Square root creates diminishing returns - being 2x slower isn't 2x worse
+  // Divide by 1000 to scale appropriately (√1000ms ≈ 31.6 → 0.0316 penalty)
+  return Math.sqrt(timeMs) / 1000;
 }
 
 async function runMatch(cat: UserRepository, catcher: UserRepository, initialState: string): Promise<MatchReport> {
