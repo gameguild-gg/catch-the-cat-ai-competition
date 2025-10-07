@@ -196,6 +196,10 @@ function findCatPosition(boardString: string, side: number): Position {
   return new Position(0, 0); // Default to center
 }
 
+function calculateTimePenalty(timeMs: number): number {
+  return timeMs / 100000;
+}
+
 async function runMatch(cat: UserRepository, catcher: UserRepository, initialState: string): Promise<MatchReport> {
   const report = new MatchReport();
   report.cat = cat.username;
@@ -238,11 +242,11 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
       
       // The other player wins
       if (board.turn === Turn.Cat) {
-        report.catcherMoveScore = maxMoves - moveCount;
-        report.catMoveScore = moveCount;
+        report.catcherMoveScore = maxMoves - moveCount; // Catcher wins = higher score
+        report.catMoveScore = moveCount; // Cat loses = lower score
       } else {
-        report.catMoveScore = maxMoves - moveCount;
-        report.catcherMoveScore = moveCount;
+        report.catMoveScore = maxMoves - moveCount; // Cat wins = higher score
+        report.catcherMoveScore = moveCount; // Catcher loses = lower score
       }
       break;
     }
@@ -253,16 +257,17 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
         throw new Error(`Invalid move: (${moveResult.move.x}, ${moveResult.move.y})`);
       }
       
-      board.move(moveResult.move);
-      moveReport.move = moveResult.move;
-      moveReport.board = board.getBoardString();
-      
-      const timePenalty = moveResult.time / 1000; // Convert to seconds
-      if (board.turn === Turn.Catcher) { // Turn switched after move
+      const timePenalty = calculateTimePenalty(moveResult.time);
+      // Assign time penalty to the current player BEFORE the turn switches
+      if (board.turn === Turn.Cat) {
         report.catTimeScore += timePenalty;
       } else {
         report.catcherTimeScore += timePenalty;
       }
+      
+      board.move(moveResult.move);
+      moveReport.move = moveResult.move;
+      moveReport.board = board.getBoardString();
       
       moveCount++;
       console.log(`${currentUser.username} (${moveReport.turn}) moved to (${moveResult.move.x}, ${moveResult.move.y}) in ${moveResult.time}ms`);
@@ -273,11 +278,11 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
       
       // The other player wins
       if (board.turn === Turn.Cat) {
-        report.catcherMoveScore = maxMoves - moveCount;
-        report.catMoveScore = moveCount;
+        report.catcherMoveScore = maxMoves - moveCount; // Catcher wins = higher score
+        report.catMoveScore = moveCount; // Cat loses = lower score
       } else {
-        report.catMoveScore = maxMoves - moveCount;
-        report.catcherMoveScore = moveCount;
+        report.catMoveScore = maxMoves - moveCount; // Cat wins = higher score
+        report.catcherMoveScore = moveCount; // Catcher loses = lower score
       }
       break;
     }
@@ -289,11 +294,11 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
   const finalResult = board.getGameResult();
   if (finalResult.isOver && report.catMoveScore === 0 && report.catcherMoveScore === 0) {
     if (finalResult.winner === Turn.Cat) {
-      report.catMoveScore = maxMoves - moveCount;
-      report.catcherMoveScore = moveCount;
+      report.catMoveScore = maxMoves - moveCount; // Cat wins = higher score
+      report.catcherMoveScore = moveCount; // Catcher loses = lower score
     } else {
-      report.catcherMoveScore = maxMoves - moveCount;
-      report.catMoveScore = moveCount;
+      report.catcherMoveScore = maxMoves - moveCount; // Catcher wins = higher score
+      report.catMoveScore = moveCount; // Cat loses = lower score
     }
   }
   
@@ -303,7 +308,6 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
 
 function calculateUserScores(matchReports: MatchReport[]): UserScore[] {
   const userScores = new Map<string, UserScore>();
-  const timeWeight = 0.1; // Weight for time penalty
   
   // Initialize user scores
   for (const user of users) {
@@ -323,10 +327,10 @@ function calculateUserScores(matchReports: MatchReport[]): UserScore[] {
     const normalizedCatcherMoveScore = match.catcherMoveScore / maxScore;
     
     catUser.catMoveScore += normalizedCatMoveScore;
-    catUser.catTimeScore += match.catTimeScore * timeWeight;
+    catUser.catTimeScore += match.catTimeScore; // Time penalties already calculated progressively
     
     catcherUser.catcherMoveScore += normalizedCatcherMoveScore;
-    catcherUser.catcherTimeScore += match.catcherTimeScore * timeWeight;
+    catcherUser.catcherTimeScore += match.catcherTimeScore; // Time penalties already calculated progressively
   }
   
   // Calculate final scores
