@@ -206,7 +206,6 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
   // Filter state
   const [username1Filter, setUsername1Filter] = useState('');
   const [username2Filter, setUsername2Filter] = useState('');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'cat' | 'catcher'>('all');
 
   useEffect(() => {
     if (!reportData) {
