@@ -494,14 +494,25 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
           onMouseEnter={() => setIsArchiveHovered(true)}
           onMouseLeave={() => setIsArchiveHovered(false)}
           variant="outline"
-          className="w-full"
+          className="w-full relative overflow-hidden group bg-gradient-to-r from-purple-50 to-blue-50 hover:from-purple-100 hover:to-blue-100 border-2 border-purple-200 hover:border-purple-300 transition-all duration-300 ease-out transform hover:scale-105 active:scale-95 hover:shadow-lg hover:shadow-purple-200/50 rounded-xl py-3"
         >
-          📚 Archive This Page
+          <div className="absolute inset-0 bg-gradient-to-r from-purple-400/20 to-blue-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+          <div className="relative flex items-center justify-center gap-2 font-medium">
+            <span className="text-xl group-hover:animate-bounce">📚</span>
+            <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent group-hover:from-purple-700 group-hover:to-blue-700 transition-all duration-300">
+              Archive This Page
+            </span>
+          </div>
+          <div className="absolute inset-0 rounded-xl bg-white/20 opacity-0 group-active:opacity-100 transition-opacity duration-150"></div>
         </Button>
         {isArchiveHovered && (
-          <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-10 whitespace-nowrap">
-            Create a permanent archive of this page
-            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+          <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-3 px-4 py-3 bg-gradient-to-r from-purple-900 to-blue-900 text-white text-sm rounded-xl shadow-xl shadow-purple-500/25 z-10 whitespace-nowrap animate-in fade-in-0 zoom-in-95 duration-200">
+            <div className="flex items-center gap-2">
+              <span className="animate-pulse">✨</span>
+              Create a permanent archive of this page
+              <span className="animate-pulse">✨</span>
+            </div>
+            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1 w-3 h-3 bg-gradient-to-br from-purple-900 to-blue-900 rotate-45"></div>
           </div>
         )}
       </div>
