@@ -218,10 +218,12 @@ function parseMoveAndTimeFromOutput(output: string, originalBoard: Board): Parse
 
 
 
-function calculateTimePenalty(timeMs: number): number {
-  // Square root creates diminishing returns - being 2x slower isn't 2x worse
-  // Divide by 1000 to scale appropriately (√1000ms ≈ 31.6 → 0.0316 penalty)
-  return Math.sqrt(timeMs) / 1000;
+function calculateTimePenalty(timeMicroseconds: number): number {
+  // Convert microseconds to milliseconds first
+  const timeMs = timeMicroseconds / 1000;
+  // Cube root creates even more diminishing returns - being 2x slower has minimal impact
+  // Divide by 5000 to scale very lightly (∛1000ms ≈ 10 → 0.002 penalty)
+  return Math.cbrt(timeMs) / 5000;
 }
 
 async function runMatch(cat: UserRepository, catcher: UserRepository, initialState: string): Promise<MatchReport> {

@@ -102,51 +102,7 @@ interface CompetitionReportProps {
   reportData?: CompetitionReport;
 }
 
-// Helper function to format board in hexagonal layout
-function formatHexagonalBoard(boardString: string, catPosition: { x: number; y: number }, side: number = 21): string {
-  let formattedBoard = '';
-  const sideSideOver2 = Math.floor(side / 2);
-  
-  // Convert board string to 2D array for easier access
-  const boardArray = boardString.split('');
-  
-  // Helper function to convert position to index (similar to Board class)
-  const positionToIndex = (x: number, y: number): number => {
-    return (y + sideSideOver2) * side + (x + sideSideOver2);
-  };
-  
-  const catIndex = positionToIndex(catPosition.x, catPosition.y);
-  
-  for (let y = -sideSideOver2; y <= sideSideOver2; y++) {
-    for (let x = -sideSideOver2; x <= sideSideOver2; x++) {
-      const index = positionToIndex(x, y);
-      
-      // Add space at the beginning of odd lines (for hexagonal offset)
-      // Handle negative modulo correctly: in JS, -1 % 2 = -1, but we want it to be 1
-      if (((y % 2) + 2) % 2 === 1 && x === -sideSideOver2) {
-        formattedBoard += ' ';
-      }
-      
-      // Add the cell content (cat, blocked, or empty)
-      if (index === catIndex) {
-        formattedBoard += '<span class="text-red-600 font-bold">C</span>';
-      } else if (index < boardArray.length) {
-        formattedBoard += boardArray[index] === '#' ? '<span class="font-bold">#</span>' : '.';
-      } else {
-        formattedBoard += '.';
-      }
-      
-      // Add space between cells or newline at end of row
-      if (x === sideSideOver2) {
-        formattedBoard += '\n';
-      } else {
-        formattedBoard += ' ';
-      }
-    }
-  }
-  
-  return formattedBoard;
-}
+
 
 // Function to reconstruct board state at a specific move index
 function reconstructBoardState(match: MatchReport, moveIndex: number): { board: string; catPosition: Position } {
