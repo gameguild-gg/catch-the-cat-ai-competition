@@ -499,9 +499,9 @@ async function main() {
   users = users.filter(user => fs.existsSync(`repos/${user.username}/build/bin/catchthecat`));
 
   console.log('#### Generating random boards... ####');
-  // generate 1 random boards
+  // generate 1 random board
   let initialStates: string[] = [];
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 1; i++) {
     let board = Board.generateRandomBoard(21);
     initialStates.push(board);
   }
