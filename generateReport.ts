@@ -56,25 +56,30 @@ export let users: UserRepository[] = [{
 }, {
     username: "Nominal9977",
     repo: "https://github.com/Nominal9977/mobagen"
-},{ 
+}, { 
     username: "AndrewGenualdo",
     repo: "https://github.com/AndrewGenualdo/ai4games-mobagen"
 }, {
     username:  "TOAG21",
     repo: "https://github.com/TOAG21/mobagen"
-},{
+}, {
     username: "AnderzBruh",
     repo: "https://github.com/AnderzBruh/mobagen"
-},{ 
+}, { 
   username: "noahfreedz",
   repo: "https://github.com/noahfreedz/AI-4-G-MOBAGEN"
-},
-{ username: "Ceichert31",
+}, { 
+  username: "Ceichert31",
   repo: "https://github.com/Ceichert31/GameAI-Interactive"
-},
-{ 
+}, { 
   username: "KFireheart",
   repo: "https://github.com/KFireheart/AI-For-Games-mobagen"
+}, {
+  username: "Cosmey",
+  repo: "https://github.com/Cosmey/mobagenReeceEnthoven"
+}, {
+  username: "carreon-as-usual",
+  repo: "https://github.com/carreon-as-usual/mobagen"
 }];
 
 interface MoveResult {
