@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
@@ -41,10 +41,17 @@ function decompressBoard(compressed: string): string {
   return decompressed;
 }
 
+// Cache for decompressed data to avoid reprocessing
+let cachedDecompressedReport: CompetitionReport | null = null;
+
 /**
- * Convert optimized competition report back to original format
+ * Convert optimized competition report back to original format with performance optimizations
  */
 function deoptimizeCompetitionReport(optimizedData: any): CompetitionReport {
+  // Return cached result if available
+  if (cachedDecompressedReport) {
+    return cachedDecompressedReport;
+  }
   const users = optimizedData.users || [];
   
   // Convert matches back to original format
@@ -81,10 +88,14 @@ function deoptimizeCompetitionReport(optimizedData: any): CompetitionReport {
     totalScore: score.ts
   }));
 
-  return {
+  const result = {
     matches,
     highScores
   };
+
+  // Cache the result
+  cachedDecompressedReport = result;
+  return result;
 }
 
 interface CompetitionReportProps {
@@ -300,40 +311,114 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
   const [username1Filter, setUsername1Filter] = useState('');
   const [username2Filter, setUsername2Filter] = useState('');
 
-  useEffect(() => {
-    if (!reportData) {
-      loadReport();
-    }
-  }, [reportData]);
+  // Pagination state for matches
+  const [currentPage, setCurrentPage] = useState(1);
+  const matchesPerPage = 10; // Show only 10 matches at a time
 
-  const loadReport = async () => {
+  // Memoize expensive computations
+  const sortedScores = useMemo(() => {
+    if (!report) return [];
+    return [...report.highScores].sort((a, b) => b.totalScore - a.totalScore);
+  }, [report]);
+
+  const allUsernames = useMemo(() => {
+    if (!report) return [];
+    return Array.from(new Set([
+      ...report.matches.map(match => match.cat),
+      ...report.matches.map(match => match.catcher)
+    ])).sort();
+  }, [report]);
+
+  // Filter matches based on two usernames with memoization
+  const filteredMatches = useMemo(() => {
+    if (!report) return [];
+    
+    return report.matches.filter(match => {
+      // If no usernames selected, show all matches
+      if (username1Filter === '' && username2Filter === '') {
+        return true;
+      }
+      
+      // If only one username selected, show matches involving that username
+      if (username1Filter !== '' && username2Filter === '') {
+        return match.cat === username1Filter || match.catcher === username1Filter;
+      }
+      
+      if (username1Filter === '' && username2Filter !== '') {
+        return match.cat === username2Filter || match.catcher === username2Filter;
+      }
+      
+      // If both usernames selected, show matches between them
+      if (username1Filter !== '' && username2Filter !== '') {
+        return (match.cat === username1Filter && match.catcher === username2Filter) ||
+               (match.cat === username2Filter && match.catcher === username1Filter);
+      }
+      
+      return false;
+    });
+  }, [report, username1Filter, username2Filter]);
+
+  // Paginated matches for performance
+  const paginatedMatches = useMemo(() => {
+    const startIndex = (currentPage - 1) * matchesPerPage;
+    const endIndex = startIndex + matchesPerPage;
+    return filteredMatches.slice(startIndex, endIndex);
+  }, [filteredMatches, currentPage, matchesPerPage]);
+
+  const totalPages = Math.ceil(filteredMatches.length / matchesPerPage);
+
+  const loadReport = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // Check if the data is in optimized format (has 'users' array)
-      const rawData = competitionReportData as any;
-      if (rawData.users && Array.isArray(rawData.users)) {
-        // Decompress optimized format
-        const decompressedReport = deoptimizeCompetitionReport(rawData);
-        setReport(decompressedReport);
-      } else {
-        // Data is already in original format
-        setReport(rawData as CompetitionReport);
-      }
+      // Use setTimeout to make the processing async and show loading state
+      setTimeout(() => {
+        try {
+          // Check if the data is in optimized format (has 'users' array)
+          const rawData = competitionReportData as any;
+          if (rawData.users && Array.isArray(rawData.users)) {
+            // Decompress optimized format
+            const decompressedReport = deoptimizeCompetitionReport(rawData);
+            setReport(decompressedReport);
+          } else {
+            // Data is already in original format
+            setReport(rawData as CompetitionReport);
+          }
+          setLoading(false);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to load report');
+          setLoading(false);
+        }
+      }, 10); // Small delay to show loading state
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load report');
-    } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const handleWebArchive = useCallback(() => {
+    window.open('https://web.archive.org/web/20241007173900/https://tolstenko.net/catch-the-cat-ai-competition/', '_blank');
+  }, []);
+
+  useEffect(() => {
+    if (!reportData) {
+      loadReport();
+    }
+  }, [reportData, loadReport]);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [username1Filter, username2Filter]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading competition report...</p>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <div className="text-lg font-medium">Loading competition results...</div>
+          <div className="text-sm text-muted-foreground">Processing match data and decompressing boards</div>
         </div>
       </div>
     );
@@ -341,82 +426,34 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
 
   if (error) {
     return (
-      <Card className="border-destructive">
-        <CardHeader>
-          <CardTitle className="text-destructive">Error Loading Report</CardTitle>
-          <CardDescription>{error}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={loadReport} variant="outline">
-            Try Again
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-destructive">❌ Error Loading Report</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">{error}</p>
+            <Button onClick={loadReport} className="w-full">
+              Try Again
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   if (!report) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>No Report Available</CardTitle>
-          <CardDescription>
-            Run the competition to generate a report
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-4">
+          <div className="text-lg font-medium">No report data available</div>
+          <Button onClick={loadReport}>
+            Load Report
+          </Button>
+        </div>
+      </div>
     );
   }
-
-  const sortedScores = [...report.highScores].sort((a, b) => b.totalScore - a.totalScore);
-
-  // Extract unique usernames from all matches
-  const allUsernames = Array.from(new Set([
-    ...report.matches.map(match => match.cat),
-    ...report.matches.map(match => match.catcher)
-  ])).sort();
-
-  // Filter matches based on two usernames
-  const filteredMatches = report.matches.filter(match => {
-    // If no usernames selected, show all matches
-    if (username1Filter === '' && username2Filter === '') {
-      return true;
-    }
-    
-    // If only one username selected, show matches involving that username
-    if (username1Filter !== '' && username2Filter === '') {
-      return match.cat === username1Filter || match.catcher === username1Filter;
-    }
-    
-    if (username1Filter === '' && username2Filter !== '') {
-      return match.cat === username2Filter || match.catcher === username2Filter;
-    }
-    
-    // If both usernames selected, show matches between them
-    if (username1Filter !== '' && username2Filter !== '') {
-      return (match.cat === username1Filter && match.catcher === username2Filter) ||
-             (match.cat === username2Filter && match.catcher === username1Filter);
-    }
-    
-    return false;
-  });
-
-  const handleWebArchive = () => {
-    const currentUrl = window.location.href;
-    const archiveUrl = `https://archive.today/?run=1&url=${encodeURIComponent(currentUrl)}`;
-    
-    // Show a brief confirmation
-    const originalTitle = document.title;
-    document.title = "📸 Archiving to Archive.today...";
-    
-    // Open the archive URL
-    window.open(archiveUrl, '_blank');
-    
-    // Restore title after a moment
-    setTimeout(() => {
-      document.title = originalTitle;
-    }, 3000);
-  };
 
   return (
     <div className="space-y-6">
@@ -455,27 +492,14 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
           onClick={handleWebArchive}
           onMouseEnter={() => setIsArchiveHovered(true)}
           onMouseLeave={() => setIsArchiveHovered(false)}
-          className="w-full h-16 text-lg font-semibold bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 hover:from-purple-700 hover:via-blue-700 hover:to-indigo-700 text-white border-0 shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-300 ease-out relative overflow-hidden group"
+          variant="outline"
+          className="w-full"
         >
-          {/* Shine effect */}
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out"></div>
-          
-          {/* Button content */}
-          <div className="relative z-10 flex items-center justify-center gap-3">
-            <span className="text-2xl">📸</span>
-            <span>Archive to Archive.today</span>
-            <span className="text-xl">✨</span>
-          </div>
+          🌐 View on Web Archive
         </Button>
-        
-        {/* Hover message */}
         {isArchiveHovered && (
-          <div className="absolute -top-16 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap z-20 animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
-            <div className="text-center">
-              <div className="font-semibold">📸 Capture this page perfectly!</div>
-              <div className="text-gray-300">Archive.today preserves React apps better than Wayback Machine</div>
-            </div>
-            {/* Arrow */}
+          <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-10 whitespace-nowrap">
+            View the archived version of this competition
             <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
           </div>
         )}
@@ -543,7 +567,7 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
         <CardHeader>
           <CardTitle>📊 Match Details</CardTitle>
           <CardDescription>
-            View detailed results from all matches ({filteredMatches.length} of {report.matches.length} matches shown)
+            View detailed results from matches ({filteredMatches.length} of {report.matches.length} matches shown, page {currentPage} of {totalPages})
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -605,14 +629,46 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
             )}
           </div>
 
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mb-6">
+              <div className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * matchesPerPage) + 1} to {Math.min(currentPage * matchesPerPage, filteredMatches.length)} of {filteredMatches.length} matches
+              </div>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-4">
-            {filteredMatches.map((match, index) => (
-                <Card key={index} className="border-l-4 border-l-primary">
+            {paginatedMatches.map((match, index) => {
+              const globalIndex = (currentPage - 1) * matchesPerPage + index;
+              return (
+                <Card key={globalIndex} className="border-l-4 border-l-primary">
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <div>
                         <CardTitle className="text-lg">
-                          Match {index + 1}: {match.cat} vs {match.catcher}
+                          Match {globalIndex + 1}: {match.cat} vs {match.catcher}
                         </CardTitle>
                         <CardDescription>
                           Cat: {match.cat} • Catcher: {match.catcher}
@@ -654,8 +710,9 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
                     </div>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
     </div>
