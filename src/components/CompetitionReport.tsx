@@ -398,7 +398,8 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
   }, []);
 
   const handleWebArchive = useCallback(() => {
-    window.open('https://web.archive.org/web/20241007173900/https://tolstenko.net/catch-the-cat-ai-competition/', '_blank');
+    const currentUrl = window.location.href;
+    window.open(`https://archive.today/?run=1&url=${encodeURIComponent(currentUrl)}`, '_blank');
   }, []);
 
   useEffect(() => {
@@ -495,11 +496,11 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
           variant="outline"
           className="w-full"
         >
-          🌐 View on Web Archive
+          📚 Archive This Page
         </Button>
         {isArchiveHovered && (
           <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-10 whitespace-nowrap">
-            View the archived version of this competition
+            Create a permanent archive of this page
             <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
           </div>
         )}
