@@ -2,12 +2,22 @@ const fs = require('fs');
 const path = require('path');
 
 // Create the build timestamp
-const buildTimestamp = new Date().toISOString();
+const now = new Date();
+const buildTimestamp = now.toISOString();
 
-// Create the timestamp object
+// Create the timestamp object with proper local timezone formatting
 const timestampData = {
   buildTime: buildTimestamp,
-  buildTimeFormatted: new Date(buildTimestamp).toLocaleString()
+  buildTimeFormatted: now.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+    timeZoneName: 'short'
+  })
 };
 
 // Ensure the src directory exists

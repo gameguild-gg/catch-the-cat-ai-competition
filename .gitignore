@@ -34,3 +34,5 @@ yarn-error.log*
 
 # Generated files
 src/competition_report.json
+
+src/buildTimestamp.ts

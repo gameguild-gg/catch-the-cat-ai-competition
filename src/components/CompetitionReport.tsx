@@ -428,7 +428,7 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
             Competition results from the latest run
           </CardDescription>
           <div className="text-sm text-muted-foreground mt-2">
-            📅 Generated: {BUILD_TIMESTAMP.buildTimeFormatted}
+            📅 Generated: {new Date(BUILD_TIMESTAMP.buildTime).toLocaleString()}
           </div>
         </CardHeader>
         <CardContent>
@@ -510,8 +510,8 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
                     {index === 0 && <span className="text-yellow-500">🥇</span>}
                     {index === 1 && <span className="text-gray-400">🥈</span>}
                     {index === 2 && <span className="text-amber-600">🥉</span>}
-                    {index === 3 && <span className="text-blue-500">🏅</span>}
-                    {index === 4 && <span className="text-green-500">🏅</span>}
+                    {index === 3 && <span>🔵</span>}
+                    {index === 4 && <span>🟢</span>}
                     {index > 4 && <span className="text-muted-foreground">#{index + 1}</span>}
                   </TableCell>
                   <TableCell className="font-medium">{score.username}</TableCell>
