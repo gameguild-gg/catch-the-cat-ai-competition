@@ -77,7 +77,16 @@ export let users: UserRepository[] = [{
 }, {
   username: "carreon-as-usual",
   repo: "https://github.com/carreon-as-usual/mobagen"
-}];
+},
+{
+  username: "conorbyrne1",
+  repo: "https://github.com/conorbyrne1/mobagenfork"
+},
+{
+  username: "AnthonySpering",
+  repo: "https://github.com/AnthonySpering/mobagen"
+}
+];
 
 interface MoveResult {
   move: Position | null;
