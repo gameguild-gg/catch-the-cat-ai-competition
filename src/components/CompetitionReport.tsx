@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Select } from './ui/select';
+import { Input } from './ui/input';
 import { CompetitionReport, MatchReport, Board, Position, Turn } from '../board';
 import competitionReportData from '../competition_report.json';
 import { BUILD_TIMESTAMP } from '../buildTimestamp';
@@ -461,9 +462,14 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
   const [error, setError] = useState<string | null>(null);
   const [isArchiveHovered, setIsArchiveHovered] = useState(false);
   
-  // Filter state
-  const [username1Filter, setUsername1Filter] = useState('');
-  const [username2Filter, setUsername2Filter] = useState('');
+  // Enhanced filter state
+  const [player1Filter, setPlayer1Filter] = useState('');
+  const [player1AsCat, setPlayer1AsCat] = useState(true);
+  const [player1AsCatcher, setPlayer1AsCatcher] = useState(true);
+  
+  const [player2Filter, setPlayer2Filter] = useState('');
+  const [player2AsCat, setPlayer2AsCat] = useState(true);
+  const [player2AsCatcher, setPlayer2AsCatcher] = useState(true);
 
   // Pagination state for matches
   const [currentPage, setCurrentPage] = useState(1);
@@ -483,34 +489,47 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
     ])).sort();
   }, [report]);
 
-  // Filter matches based on two usernames with memoization
+  // Enhanced filter matches based on user selection and roles
   const filteredMatches = useMemo(() => {
     if (!report) return [];
     
     return report.matches.filter(match => {
-      // If no usernames selected, show all matches
-      if (username1Filter === '' && username2Filter === '') {
+      // If no players selected, show all matches
+      if (player1Filter === '' && player2Filter === '') {
         return true;
       }
       
-      // If only one username selected, show matches involving that username
-      if (username1Filter !== '' && username2Filter === '') {
-        return match.cat === username1Filter || match.catcher === username1Filter;
+      // Check if player1 matches the filter criteria
+      const player1Matches = player1Filter === '' || (
+        (player1AsCat && match.cat === player1Filter) ||
+        (player1AsCatcher && match.catcher === player1Filter)
+      );
+      
+      // Check if player2 matches the filter criteria
+      const player2Matches = player2Filter === '' || (
+        (player2AsCat && match.cat === player2Filter) ||
+        (player2AsCatcher && match.catcher === player2Filter)
+      );
+      
+      // If only one player is selected, show matches where that player participates in the selected role(s)
+      if (player1Filter !== '' && player2Filter === '') {
+        return player1Matches;
       }
       
-      if (username1Filter === '' && username2Filter !== '') {
-        return match.cat === username2Filter || match.catcher === username2Filter;
+      if (player1Filter === '' && player2Filter !== '') {
+        return player2Matches;
       }
       
-      // If both usernames selected, show matches between them
-      if (username1Filter !== '' && username2Filter !== '') {
-        return (match.cat === username1Filter && match.catcher === username2Filter) ||
-               (match.cat === username2Filter && match.catcher === username1Filter);
+      // If both players are selected, show matches where both players participate in their selected roles
+      if (player1Filter !== '' && player2Filter !== '') {
+        return player1Matches && player2Matches;
       }
       
       return false;
     });
-  }, [report, username1Filter, username2Filter]);
+  }, [report, player1Filter, player1AsCat, player1AsCatcher, player2Filter, player2AsCat, player2AsCatcher]);
+
+
 
   // Paginated matches for performance
   const paginatedMatches = useMemo(() => {
@@ -565,7 +584,7 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [username1Filter, username2Filter]);
+  }, [player1Filter, player1AsCat, player1AsCatcher, player2Filter, player2AsCat, player2AsCatcher]);
 
   if (loading) {
     return (
@@ -748,59 +767,120 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Filter Controls */}
+          {/* Enhanced Filter Controls */}
           <div className="mb-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label htmlFor="username1-filter" className="text-sm font-medium">
-                  Player 1
-                </label>
-                <Select
-                   id="username1-filter"
-                   value={username1Filter}
-                   onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUsername1Filter(e.target.value)}
-                   className="w-full"
-                 >
-                  <option value="">Select Player 1...</option>
-                  {allUsernames.map(username => (
-                    <option key={username} value={username}>{username}</option>
-                  ))}
-                </Select>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Player 1 Filter */}
+              <div className="space-y-3 p-4 border rounded-lg">
+                <h4 className="text-sm font-semibold text-gray-700">Player 1 Filter</h4>
+                <div className="space-y-2">
+                  <label htmlFor="player1-filter" className="text-sm font-medium">
+                    Select User
+                  </label>
+                  <Select
+                     id="player1-filter"
+                     value={player1Filter}
+                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlayer1Filter(e.target.value)}
+                     className="w-full"
+                   >
+                    <option value="">Any Player...</option>
+                    {allUsernames.map(username => (
+                      <option key={username} value={username}>{username}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Roles</label>
+                  <div className="flex items-center space-x-4">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <Input
+                        type="checkbox"
+                        checked={player1AsCat}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlayer1AsCat(e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm">🐱 Cat</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <Input
+                        type="checkbox"
+                        checked={player1AsCatcher}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlayer1AsCatcher(e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm">🕷️ Catcher</span>
+                    </label>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <label htmlFor="username2-filter" className="text-sm font-medium">
-                  Player 2
-                </label>
-                <Select
-                   id="username2-filter"
-                   value={username2Filter}
-                   onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUsername2Filter(e.target.value)}
-                   className="w-full"
-                 >
-                  <option value="">Select Player 2...</option>
-                  {allUsernames.map(username => (
-                    <option key={username} value={username}>{username}</option>
-                  ))}
-                </Select>
+
+              {/* Player 2 Filter */}
+              <div className="space-y-3 p-4 border rounded-lg">
+                <h4 className="text-sm font-semibold text-gray-700">Player 2 Filter</h4>
+                <div className="space-y-2">
+                  <label htmlFor="player2-filter" className="text-sm font-medium">
+                    Select User
+                  </label>
+                  <Select
+                     id="player2-filter"
+                     value={player2Filter}
+                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlayer2Filter(e.target.value)}
+                     className="w-full"
+                   >
+                    <option value="">Any Player...</option>
+                    {allUsernames.map(username => (
+                      <option key={username} value={username}>{username}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Roles</label>
+                  <div className="flex items-center space-x-4">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <Input
+                        type="checkbox"
+                        checked={player2AsCat}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlayer2AsCat(e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm">🐱 Cat</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <Input
+                        type="checkbox"
+                        checked={player2AsCatcher}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlayer2AsCatcher(e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm">🕷️ Catcher</span>
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
-            {(username1Filter || username2Filter) && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  {username1Filter && username2Filter 
-                    ? `Showing matches between ${username1Filter} and ${username2Filter}: ${filteredMatches.length} matches`
-                    : `Showing matches for ${username1Filter || username2Filter}: ${filteredMatches.length} of ${report.matches.length} matches`
+            
+            {/* Filter Status and Clear Button */}
+            {(player1Filter || player2Filter) && (
+              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                <span className="text-sm text-blue-700">
+                  {player1Filter && player2Filter 
+                    ? `Showing matches with ${player1Filter} and ${player2Filter}: ${filteredMatches.length} matches`
+                    : `Showing matches for ${player1Filter || player2Filter}: ${filteredMatches.length} of ${report.matches.length} matches`
                   }
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setUsername1Filter('');
-                    setUsername2Filter('');
+                    setPlayer1Filter('');
+                    setPlayer2Filter('');
+                    setPlayer1AsCat(true);
+                    setPlayer1AsCatcher(true);
+                    setPlayer2AsCat(true);
+                    setPlayer2AsCatcher(true);
                   }}
                 >
-                  Clear Filters
+                  Clear All Filters
                 </Button>
               </div>
             )}
@@ -924,7 +1004,7 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
                       {/* Interactive Board Viewer */}
                       {match.initialState?.board && (
                         <BoardViewer 
-                          key={`${match.cat}-${match.catcher}-${username1Filter}-${username2Filter}`}
+                          key={`${match.cat}-${match.catcher}-${player1Filter}-${player2Filter}`}
                           match={match} 
                         />
                       )}
