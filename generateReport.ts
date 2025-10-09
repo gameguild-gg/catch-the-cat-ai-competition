@@ -151,10 +151,16 @@ async function requestMove(board: Board, user: UserRepository): Promise<MoveResu
           // Parse the output to extract both the move and processing time
           // The C++ code now prints the board state after the move, followed by processing time
           const result = parseMoveAndTimeFromOutput(stdout, board);
-          safeResolve({ 
-            move: result.move, 
-            time: result.processingTime // Use processing time from C++ program
-          });
+          
+          // Check if the execution time exceeded the timeout, even if the process completed
+          if (executionTime >= timeout) {
+            safeResolve({ move: null, time: timeout, error: 'Timeout exceeded' });
+          } else {
+            safeResolve({ 
+              move: result.move, 
+              time: result.processingTime // Use processing time from C++ program
+            });
+          }
         } catch (parseError) {
           safeResolve({ move: null, time: executionTime, error: `Parse error: ${parseError instanceof Error ? parseError.message : String(parseError)}` });
         }
