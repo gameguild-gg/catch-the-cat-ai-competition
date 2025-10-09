@@ -493,7 +493,13 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
   const filteredMatches = useMemo(() => {
     if (!report) return [];
     
-    return report.matches.filter(match => {
+    // Build a quick lookup for user total scores
+    const userTotalScore: Record<string, number> = {};
+    for (const s of report.highScores) {
+      userTotalScore[s.username] = s.totalScore;
+    }
+    
+    const base = report.matches.filter(match => {
       // If no players selected, show all matches
       if (player1Filter === '' && player2Filter === '') {
         return true;
@@ -526,6 +532,16 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
       }
       
       return false;
+    });
+
+    // Sort by sum of total scores of both players (descending), then by number of moves (descending)
+    return base.sort((a, b) => {
+      const aSum = (userTotalScore[a.cat] ?? 0) + (userTotalScore[a.catcher] ?? 0);
+      const bSum = (userTotalScore[b.cat] ?? 0) + (userTotalScore[b.catcher] ?? 0);
+      if (aSum !== bSum) return bSum - aSum;
+      const aMoves = a.moves.length;
+      const bMoves = b.moves.length;
+      return bMoves - aMoves;
     });
   }, [report, player1Filter, player1AsCat, player1AsCatcher, player2Filter, player2AsCat, player2AsCatcher]);
 
@@ -718,15 +734,15 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
               {sortedScores.slice(0, 10).map((score, index) => (
                 <TableRow key={score.username}>
                   <TableCell className="font-medium">
-                    {index === 0 && <span className="text-yellow-500">🥇</span>}
-                    {index === 1 && <span className="text-gray-400">🥈</span>}
-                    {index === 2 && <span className="text-amber-600">🥉</span>}
-                    {index === 3 && <span>🔵</span>}
-                    {index === 4 && <span>🟢</span>}
-                    {index === 5 && <span>🟡</span>}
-                    {index === 6 && <span>🟠</span>}
-                    {index === 7 && <span>🔴</span>}
-                    {index > 7 && <span className="text-muted-foreground">#{index + 1}</span>}
+                    {index === 0 ? (
+                      <span className="text-yellow-500">🥇</span>
+                    ) : index === 1 ? (
+                      <span className="text-gray-400">🥈</span>
+                    ) : index === 2 ? (
+                      <span className="text-amber-600">🥉</span>
+                    ) : (
+                      <span>#{index + 1}</span>
+                    )}
                   </TableCell>
                   <TableCell className="font-medium">{score.username}</TableCell>
                   <TableCell className="text-right font-bold">

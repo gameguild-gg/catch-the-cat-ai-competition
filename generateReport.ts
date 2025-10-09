@@ -530,28 +530,32 @@ async function main() {
   users = users.filter(user => fs.existsSync(`repos/${user.username}/build/bin/catchthecat`));
 
   console.log('#### Generating random boards... ####');
-  // generate 4 random boards
+  // generate 8 random boards
   let initialStates: string[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 8; i++) {
     let board = Board.generateRandomBoard(21);
     initialStates.push(board);
-    console.log(`Generated board ${i + 1}/4`);
+    console.log(`Generated board ${i + 1}/8`);
   }
 
   // run each user's catchthecat executable with the random boards
   console.log('#### Running catchthecat competition... ####');
 
-  let matchReports: MatchReport[] = [];
-
+  // Build all match tasks first
+  const matchTasks: (() => Promise<MatchReport>)[] = [];
   for (const initialState of initialStates) {
     for (const cat of users) {
       for (const catcher of users) {
         if (cat.username === catcher.username) continue;
-        const matchReport = await runMatch(cat, catcher, initialState);
-        matchReports.push(matchReport);
+        matchTasks.push(() => runMatch(cat, catcher, initialState));
       }
     }
   }
+
+  // Run matches with concurrency based on available CPU cores
+  const matchParallelism = getOptimalParallelJobs();
+  console.log(`Using ${matchParallelism} parallel matches (detected ${os.cpus().length} CPU cores)`);
+  const matchReports: MatchReport[] = await runTasksWithConcurrency(matchTasks, matchParallelism);
 
   // Calculate user scores and generate report
   console.log('#### Calculating scores and generating report... ####');
@@ -576,3 +580,26 @@ main().then(() => {
   console.error('Error running competition:', error);
   process.exit(1);
 });
+
+async function runTasksWithConcurrency<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<T[]> {
+  const results: (T | undefined)[] = new Array(tasks.length);
+  let index = 0;
+
+  const worker = async () => {
+    while (true) {
+      const current = index++;
+      if (current >= tasks.length) break;
+      try {
+        results[current] = await tasks[current]();
+      } catch (error) {
+        console.error(`Task ${current} failed: ${error instanceof Error ? error.message : String(error)}`);
+        // continue without throwing to keep other tasks running
+      }
+    }
+  };
+
+  const workerCount = Math.min(concurrency, tasks.length);
+  const workers = Array.from({ length: workerCount }, () => worker());
+  await Promise.all(workers);
+  return results.filter((r): r is T => r !== undefined);
+}
