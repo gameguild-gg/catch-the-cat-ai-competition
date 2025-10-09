@@ -27,8 +27,11 @@ export class UserRepository {
 }
 
 export let users: UserRepository[] = [{
-    username: 'tolstenko',
-    repo: 'https://github.com/gameguild-gg/mobagen',
+    username: 'DPS2004',
+    repo: 'https://github.com/DPS2004/mobagen',
+}, { 
+  username: "Ceichert31",
+  repo: "https://github.com/Ceichert31/GameAI-Interactive"
 }, {
     username: 'BrandonCherry166',
     repo: 'https://github.com/BrandonCherry166/mobagen',
@@ -51,9 +54,6 @@ export let users: UserRepository[] = [{
     username: 'blade-x7',
     repo: 'https://github.com/blade-x7/mobagen',
 }, {
-    username: 'DPS2004',
-    repo: 'https://github.com/DPS2004/mobagen',
-}, {
     username: "Nominal9977",
     repo: "https://github.com/Nominal9977/mobagen"
 }, { 
@@ -68,9 +68,6 @@ export let users: UserRepository[] = [{
 }, { 
   username: "noahfreedz",
   repo: "https://github.com/noahfreedz/AI-4-G-MOBAGEN"
-}, { 
-  username: "Ceichert31",
-  repo: "https://github.com/Ceichert31/GameAI-Interactive"
 }, { 
   username: "KFireheart",
   repo: "https://github.com/KFireheart/AI-For-Games-mobagen"
@@ -518,11 +515,12 @@ async function main() {
   users = users.filter(user => fs.existsSync(`repos/${user.username}/build/bin/catchthecat`));
 
   console.log('#### Generating random boards... ####');
-  // generate 1 random board
+  // generate 3 random boards
   let initialStates: string[] = [];
-  for (let i = 0; i < 1; i++) {
+  for (let i = 0; i < 3; i++) {
     let board = Board.generateRandomBoard(21);
     initialStates.push(board);
+    console.log(`Generated board ${i + 1}/3`);
   }
 
   // run each user's catchthecat executable with the random boards
