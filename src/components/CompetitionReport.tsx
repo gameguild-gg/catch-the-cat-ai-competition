@@ -60,7 +60,7 @@ function deoptimizeCompetitionReport(optimizedData: any): CompetitionReport {
       username: users[move.u],
       turn: move.t === 0 ? Turn.Cat : Turn.Catcher,
       time: move.tm,
-      move: { x: move.mv.x, y: move.mv.y },
+      ...(move.mv && { move: { x: move.mv.x, y: move.mv.y } }),
       ...(move.e && { error: move.e })
     })),
     cat: users[match.c],
@@ -85,7 +85,9 @@ function deoptimizeCompetitionReport(optimizedData: any): CompetitionReport {
     catcherTimeScore: score.chts,
     catScore: score.cs,
     catcherScore: score.chs2,
-    totalScore: score.ts
+    totalScore: score.ts,
+    catWins: score.cw || 0,
+    catcherWins: score.chw || 0
   }));
 
   const result = {
@@ -131,6 +133,55 @@ function reconstructBoardState(match: MatchReport, moveIndex: number): { board: 
     board: board.getBoardString(),
     catPosition: board.catPosition
   };
+}
+
+// Function to determine the winner of a match
+function getMatchWinner(match: MatchReport): { winner: 'cat' | 'catcher' | null; reason?: string } {
+  try {
+    // Reconstruct the final board state
+    const finalState = reconstructBoardState(match, match.moves.length - 1);
+    
+    // Create a board instance to check game result
+    const board = new Board(
+      finalState.board,
+      finalState.catPosition,
+      match.cat,
+      match.catcher
+    );
+    
+    const gameResult = board.getGameResult();
+    
+    if (gameResult.isOver && gameResult.winner) {
+      return {
+        winner: gameResult.winner === Turn.Cat ? 'cat' : 'catcher',
+        reason: gameResult.reason
+      };
+    }
+    
+    // If game is not over, determine winner by score
+    const catFinalScore = match.catMoveScore - match.catTimeScore;
+    const catcherFinalScore = match.catcherMoveScore - match.catcherTimeScore;
+    
+    if (catFinalScore > catcherFinalScore) {
+      return { winner: 'cat', reason: 'Higher score' };
+    } else if (catcherFinalScore > catFinalScore) {
+      return { winner: 'catcher', reason: 'Higher score' };
+    }
+    
+    return { winner: null, reason: 'Tie' };
+  } catch (error) {
+    // If there's an error, fall back to score comparison
+    const catFinalScore = match.catMoveScore - match.catTimeScore;
+    const catcherFinalScore = match.catcherMoveScore - match.catcherTimeScore;
+    
+    if (catFinalScore > catcherFinalScore) {
+      return { winner: 'cat', reason: 'Higher score' };
+    } else if (catcherFinalScore > catFinalScore) {
+      return { winner: 'catcher', reason: 'Higher score' };
+    }
+    
+    return { winner: null, reason: 'Tie' };
+  }
 }
 
 // Hexagonal Board Component with proper SVG rendering
@@ -275,6 +326,11 @@ interface BoardViewerProps {
 
 function BoardViewer({ match }: BoardViewerProps) {
   const [currentMoveIndex, setCurrentMoveIndex] = useState(-1); // -1 for initial state
+
+  // Reset to initial state when match changes (e.g., when filters are cleared)
+  useEffect(() => {
+    setCurrentMoveIndex(-1);
+  }, [match]);
   
   // Create array of all board states (initial + after each move)
   const boardStates = [
@@ -301,6 +357,12 @@ function BoardViewer({ match }: BoardViewerProps) {
   const currentState = boardStates[currentMoveIndex + 1]; // +1 because -1 index maps to 0
   const canGoPrevious = currentMoveIndex > -1;
   const canGoNext = currentMoveIndex < match.moves.length - 1;
+
+  // Safety check: if currentState is undefined, reset to initial state
+  if (!currentState) {
+    setCurrentMoveIndex(-1);
+    return null; // Return null to prevent rendering with invalid state
+  }
 
   const goToPrevious = () => {
     if (canGoPrevious) {
@@ -332,7 +394,10 @@ function BoardViewer({ match }: BoardViewerProps) {
                 {currentState.turn}
               </Badge>
               <span className="text-sm text-muted-foreground">
-                {currentState.moveInfo.username}: ({currentState.moveInfo.move.x}, {currentState.moveInfo.move.y})
+                {currentState.moveInfo.username}: {currentState.moveInfo.move ? `(${currentState.moveInfo.move.x}, ${currentState.moveInfo.move.y})` : 'No move (timeout/error)'}
+                {currentState.moveInfo.error && currentState.moveInfo.move && (
+                  <span className="text-red-600 ml-2">- Invalid move</span>
+                )}
               </span>
               <span className="text-xs text-muted-foreground">
                 {currentState.moveInfo.time}ms
@@ -609,9 +674,9 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
       {/* Leaderboard */}
       <Card>
         <CardHeader>
-          <CardTitle>🥇 Top 5 Leaderboard</CardTitle>
+          <CardTitle>🥇 Top 8 Leaderboard</CardTitle>
           <CardDescription>
-            Top 5 players ranked by total score (normalized by board size with time penalties)
+            Top 8 players ranked by total score (normalized by board size with time penalties)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -624,12 +689,14 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
                   <TableHead className="text-right min-w-[100px]">Total Score</TableHead>
                   <TableHead className="text-right min-w-[90px]">Cat Score</TableHead>
                   <TableHead className="text-right min-w-[100px]">Catcher Score</TableHead>
+                  <TableHead className="text-right min-w-[80px]">Cat Wins</TableHead>
+                  <TableHead className="text-right min-w-[100px]">Catcher Wins</TableHead>
                   <TableHead className="text-right min-w-[80px]">Cat Time</TableHead>
                   <TableHead className="text-right min-w-[100px]">Catcher Time</TableHead>
                 </TableRow>
               </TableHeader>
             <TableBody>
-              {sortedScores.slice(0, 5).map((score, index) => (
+              {sortedScores.slice(0, 8).map((score, index) => (
                 <TableRow key={score.username}>
                   <TableCell className="font-medium">
                     {index === 0 && <span className="text-yellow-500">🥇</span>}
@@ -637,7 +704,10 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
                     {index === 2 && <span className="text-amber-600">🥉</span>}
                     {index === 3 && <span>🔵</span>}
                     {index === 4 && <span>🟢</span>}
-                    {index > 4 && <span className="text-muted-foreground">#{index + 1}</span>}
+                    {index === 5 && <span>🟡</span>}
+                    {index === 6 && <span>🟠</span>}
+                    {index === 7 && <span>🔴</span>}
+                    {index > 7 && <span className="text-muted-foreground">#{index + 1}</span>}
                   </TableCell>
                   <TableCell className="font-medium">{score.username}</TableCell>
                   <TableCell className="text-right font-bold">
@@ -648,6 +718,12 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
                   </TableCell>
                   <TableCell className="text-right">
                     {score.catcherScore.toFixed(3)}
+                  </TableCell>
+                  <TableCell className="text-right text-green-600 font-medium">
+                    {score.catWins}
+                  </TableCell>
+                  <TableCell className="text-right text-green-600 font-medium">
+                    {score.catcherWins}
                   </TableCell>
                   <TableCell className="text-right text-destructive">
                     -{score.catTimeScore.toPrecision(3)}
@@ -763,16 +839,41 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
           <div className="space-y-4">
             {paginatedMatches.map((match, index) => {
               const globalIndex = (currentPage - 1) * matchesPerPage + index;
+              const matchResult = getMatchWinner(match);
+              
               return (
                 <Card key={globalIndex} className="border-l-4 border-l-primary">
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <div>
                         <CardTitle className="text-lg">
-                          Match {globalIndex + 1}: {match.cat} vs {match.catcher}
+                          Match {globalIndex + 1}: 
+                          <div className="inline-flex items-center gap-2 ml-2">
+                            <div className={`px-2 py-1 rounded text-sm font-medium ${
+                              matchResult.winner === 'cat' ? 'bg-green-100 text-green-800' : 
+                              matchResult.winner === 'catcher' ? 'bg-red-100 text-red-800' : 
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {match.cat}
+                            </div>
+                            <span className="text-gray-500">vs</span>
+                            <div className={`px-2 py-1 rounded text-sm font-medium ${
+                              matchResult.winner === 'catcher' ? 'bg-green-100 text-green-800' : 
+                              matchResult.winner === 'cat' ? 'bg-red-100 text-red-800' : 
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {match.catcher}
+                            </div>
+                          </div>
                         </CardTitle>
                         <CardDescription>
-                          Cat: {match.cat} • Catcher: {match.catcher}
+                          Cat: <span className={matchResult.winner === 'cat' ? 'text-green-600 font-medium' : matchResult.winner === 'catcher' ? 'text-red-600' : 'text-gray-600'}>{match.cat}</span> • 
+                          Catcher: <span className={matchResult.winner === 'catcher' ? 'text-green-600 font-medium' : matchResult.winner === 'cat' ? 'text-red-600' : 'text-gray-600'}>{match.catcher}</span>
+                          {matchResult.winner && (
+                            <span className="ml-2 text-xs text-gray-500">
+                              ({matchResult.winner === 'cat' ? match.cat : match.catcher} won - {matchResult.reason})
+                            </span>
+                          )}
                         </CardDescription>
                       </div>
                       <div className="text-right">
@@ -797,16 +898,35 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
                             <Badge variant="destructive" className="mr-2">
                               Errors Occurred
                             </Badge>
-                            <span className="text-xs text-muted-foreground">
-                              Some moves failed during execution
-                            </span>
+                            <div className="mt-2 space-y-1">
+                              {match.moves
+                                .filter(move => move.error)
+                                .map((move, index) => (
+                                  <div key={index} className="text-xs bg-red-50 border border-red-200 rounded p-2">
+                                    <div className="font-medium text-red-800">
+                                      Move {match.moves.indexOf(move) + 1} - {move.turn === Turn.Cat ? match.cat : match.catcher}:
+                                    </div>
+                                    <div className="text-red-700 mt-1 break-words whitespace-pre-wrap">
+                                      {move.error}
+                                      {move.move && (
+                                        <div className="font-mono mt-1">
+                                          at ({move.move.x}, {move.move.y})
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
                           </div>
                         )}
                       </div>
                       
                       {/* Interactive Board Viewer */}
                       {match.initialState?.board && (
-                        <BoardViewer match={match} />
+                        <BoardViewer 
+                          key={`${match.cat}-${match.catcher}-${username1Filter}-${username2Filter}`}
+                          match={match} 
+                        />
                       )}
                     </div>
                   </CardContent>

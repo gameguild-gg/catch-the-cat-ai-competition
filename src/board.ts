@@ -57,7 +57,9 @@ export class UserScore {
     public catcherTimeScore: number = 0,
     public catScore: number = 0, // catScore = catMoveScore - catTimeScore
     public catcherScore: number = 0, // catcherScore = catcherMoveScore - catcherTimeScore
-    public totalScore: number = 0 // totalScore = catScore + catcherScore
+    public totalScore: number = 0, // totalScore = catScore + catcherScore
+    public catWins: number = 0, // number of wins as cat (display only, not used for scoring)
+    public catcherWins: number = 0 // number of wins as catcher (display only, not used for scoring)
   ) {}
 }
 
@@ -78,7 +80,7 @@ export class MoveReport {
   username: string = ''; // username of the player who made the move
   turn: Turn = Turn.Cat; // which player made the move
   time: number = 0; // how much time the agent spent on the move, in milliseconds
-  move: Position = new Position(); // move applied by the agent cat or catcher
+  move?: Position; // move applied by the agent cat or catcher (optional for timeouts)
   error?: string; // error message if any
 }
 

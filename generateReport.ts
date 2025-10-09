@@ -263,6 +263,11 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
     moveReport.turn = board.turn;
     moveReport.time = moveResult.time;
     
+    // Store the attempted move if available (will be undefined for timeouts)
+    if (moveResult.move) {
+      moveReport.move = moveResult.move;
+    }
+    
     if (moveResult.error || !moveResult.move) {
       // Player made an invalid move or timed out
       moveReport.error = moveResult.error || 'Invalid move';
@@ -293,14 +298,16 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
       
       // Execute the move (board.move() will validate and throw error if invalid)
       board.move(moveResult.move);
-      moveReport.move = moveResult.move;
       
       moveCount++;
       console.log(`${currentUser.username} (${moveReport.turn}) moved to (${moveResult.move.x}, ${moveResult.move.y}) in ${moveResult.time}ms`);
       
     } catch (error) {
       moveReport.error = error instanceof Error ? error.message : String(error);
-      console.log(`${currentUser.username} (${board.turn}) made invalid move: ${error instanceof Error ? error.message : String(error)}`);
+      console.log(`${currentUser.username} (${board.turn}) made invalid move (${moveResult.move.x}, ${moveResult.move.y}): ${error instanceof Error ? error.message : String(error)}`);
+      
+      // Add the invalid move to the report before breaking
+      report.moves.push(moveReport);
       
       // The other player wins
       if (board.turn === Turn.Cat) {
@@ -356,6 +363,16 @@ function calculateUserScores(matchReports: MatchReport[]): UserScore[] {
     
     catcherUser.catcherMoveScore += normalizedCatcherMoveScore;
     catcherUser.catcherTimeScore += match.catcherTimeScore; // Time penalties already calculated progressively
+    
+    // Count wins based on move scores (higher move score = winner)
+    if (match.catMoveScore > match.catcherMoveScore) {
+      // Cat won this match
+      catUser.catWins += 1;
+    } else if (match.catcherMoveScore > match.catMoveScore) {
+      // Catcher won this match
+      catcherUser.catcherWins += 1;
+    }
+    // Note: ties are not counted as wins for either player
   }
   
   // Calculate final scores
@@ -417,7 +434,7 @@ function optimizeCompetitionReport(report: CompetitionReport): any {
       u: userMap.get(move.username), // username index
       t: move.turn === Turn.Cat ? 0 : 1, // turn as number
       tm: move.time, // time
-      mv: { x: move.move.x, y: move.move.y }, // move
+      ...(move.move && { mv: { x: move.move.x, y: move.move.y } }), // move (only if exists)
       ...(move.error && { e: move.error }) // error (only if exists)
     })),
     c: userMap.get(match.cat), // cat username index
@@ -442,7 +459,9 @@ function optimizeCompetitionReport(report: CompetitionReport): any {
     chts: score.catcherTimeScore,
     cs: score.catScore,
     chs2: score.catcherScore,
-    ts: score.totalScore
+    ts: score.totalScore,
+    cw: score.catWins,
+    chw: score.catcherWins
   }));
 
   return {
