@@ -470,8 +470,8 @@ function optimizeCompetitionReport(report: CompetitionReport): any {
     }
   }));
 
-  // Optimize high scores
-  const optimizedHighScores = report.highScores.map(score => ({
+  // Optimize high scores (limit to top 10 to protect underperforming students)
+  const optimizedHighScores = report.highScores.slice(0, 10).map(score => ({
     u: userMap.get(score.username),
     cms: score.catMoveScore,
     chs: score.catcherMoveScore,
@@ -484,8 +484,11 @@ function optimizeCompetitionReport(report: CompetitionReport): any {
     chw: score.catcherWins
   }));
 
+  // Number of distinct boards used in this report (generator-side source of truth)
+  // const boardsTested = new Set(report.matches.map(m => m.initialState.board)).size;
+
   return {
-    users: allUsernames, // username mapping
+    users: allUsernames,
     matches: optimizedMatches,
     highScores: optimizedHighScores
   };
@@ -540,10 +543,10 @@ async function main() {
   console.log('#### Generating random boards... ####');
   // generate 8 random boards
   let initialStates: string[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 8; i++) {
     let board = Board.generateRandomBoard(21);
     initialStates.push(board);
-    console.log(`Generated board ${i + 1}/4`);
+    console.log(`Generated board ${i + 1}/8`);
   }
 
   // run each user's catchthecat executable with the random boards
@@ -569,9 +572,45 @@ async function main() {
   console.log('#### Calculating scores and generating report... ####');
   const userScores = calculateUserScores(matchReports);
   
+  // Build lookup map for total scores by username
+  const totalScoreByUser = new Map<string, number>();
+  for (const s of userScores) {
+    totalScoreByUser.set(s.username, s.totalScore);
+  }
+
+  // Sort matches by sum of both players' total scores (descending), then by number of moves (descending)
+  const sortedMatches = [...matchReports].sort((a, b) => {
+    const aSum = (totalScoreByUser.get(a.cat) ?? 0) + (totalScoreByUser.get(a.catcher) ?? 0);
+    const bSum = (totalScoreByUser.get(b.cat) ?? 0) + (totalScoreByUser.get(b.catcher) ?? 0);
+    if (aSum !== bSum) return bSum - aSum;
+    const aMoves = a.moves.length;
+    const bMoves = b.moves.length;
+    return bMoves - aMoves;
+  });
+
+  // Determine top-10 users and partition matches
+  const top10 = new Set(userScores.slice(0, 10).map(s => s.username));
+  const visibleMatches: MatchReport[] = [];
+  const protectedMatches: MatchReport[] = [];
+  for (const m of sortedMatches) {
+    if (!top10.has(m.cat) || !top10.has(m.catcher)) {
+      protectedMatches.push(m);
+    } else {
+      visibleMatches.push(m);
+    }
+  }
+  // Shuffle the protected matches to protect underperformers
+  for (let i = protectedMatches.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = protectedMatches[i];
+    protectedMatches[i] = protectedMatches[j];
+    protectedMatches[j] = tmp;
+  }
+  const finalMatches = [...visibleMatches, ...protectedMatches];
+  
   const competitionReport = new CompetitionReport();
-  competitionReport.matches = matchReports;
-  competitionReport.highScores = userScores;
+  competitionReport.matches = finalMatches;
+  competitionReport.highScores = userScores.slice(0, 10);
   
   // Generate optimized JSON report for further analysis
   const optimizedReport = optimizeCompetitionReport(competitionReport);

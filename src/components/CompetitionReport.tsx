@@ -489,6 +489,18 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
     ])).sort();
   }, [report]);
 
+  // Boards tested derived from matches and player count: NumberOfMatches/(NumOfPlayers*(NumOfPlayers-1))
+  const boardsTested = useMemo(() => {
+    if (!report) return 0;
+    const numMatches = report.matches.length;
+    const players = Array.from(new Set([
+      ...report.matches.map(m => m.cat),
+      ...report.matches.map(m => m.catcher)
+    ])).length;
+    if (players <= 1) return 0;
+    return numMatches / (players * (players - 1));
+  }, [report]);
+
   // Enhanced filter matches based on user selection and roles
   const filteredMatches = useMemo(() => {
     if (!report) return [];
@@ -534,15 +546,8 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
       return false;
     });
 
-    // Sort by sum of total scores of both players (descending), then by number of moves (descending)
-    return base.sort((a, b) => {
-      const aSum = (userTotalScore[a.cat] ?? 0) + (userTotalScore[a.catcher] ?? 0);
-      const bSum = (userTotalScore[b.cat] ?? 0) + (userTotalScore[b.catcher] ?? 0);
-      if (aSum !== bSum) return bSum - aSum;
-      const aMoves = a.moves.length;
-      const bMoves = b.moves.length;
-      return bMoves - aMoves;
-    });
+    // Preserve order from backend (no client-side sorting/randomization)
+    return base;
   }, [report, player1Filter, player1AsCat, player1AsCatcher, player2Filter, player2AsCat, player2AsCatcher]);
 
 
@@ -669,7 +674,7 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
               <div className="text-sm text-muted-foreground">Total Matches</div>
             </div>
             <div>
-              <div className="text-2xl font-bold">{report.matches.length / (report.highScores.length * (report.highScores.length - 1))}</div>
+              <div className="text-2xl font-bold">{boardsTested}</div>
               <div className="text-sm text-muted-foreground">Boards Tested</div>
             </div>
           </div>
