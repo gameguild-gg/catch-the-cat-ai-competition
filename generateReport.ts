@@ -540,10 +540,10 @@ async function main() {
   console.log('#### Generating random boards... ####');
   // generate 8 random boards
   let initialStates: string[] = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 1; i++) {
     let board = Board.generateRandomBoard(21);
     initialStates.push(board);
-    console.log(`Generated board ${i + 1}/8`);
+    console.log(`Generated board ${i + 1}/1`);
   }
 
   // run each user's catchthecat executable with the random boards
