@@ -484,14 +484,83 @@ function optimizeCompetitionReport(report: CompetitionReport): any {
     chw: score.catcherWins
   }));
 
-  // Number of distinct boards used in this report (generator-side source of truth)
-  // const boardsTested = new Set(report.matches.map(m => m.initialState.board)).size;
-
   return {
     users: allUsernames,
     matches: optimizedMatches,
     highScores: optimizedHighScores
   };
+}
+
+// Stream the optimized report to file to avoid building an enormous JSON string in memory
+async function writeOptimizedReportStream(report: CompetitionReport, filePath: string): Promise<void> {
+  // Build username mapping once
+  const allUsernames = Array.from(new Set([
+    ...report.matches.map(match => match.cat),
+    ...report.matches.map(match => match.catcher),
+    ...report.matches.flatMap(match => match.moves.map(move => move.username))
+  ]));
+  const userMap = new Map<string, number>();
+  allUsernames.forEach((username, index) => {
+    userMap.set(username, index);
+  });
+
+  const stream = fs.createWriteStream(filePath, { encoding: 'utf8' });
+  await new Promise<void>((resolve, reject) => {
+    stream.on('error', (err) => reject(err));
+
+    // Write header and users
+    stream.write('{"users":');
+    stream.write(JSON.stringify(allUsernames));
+    stream.write(',"matches":[');
+
+    let firstMatch = true;
+    for (const match of report.matches) {
+      const optimizedMatch = {
+        m: match.moves.map(move => ({
+          u: userMap.get(move.username),
+          t: move.turn === Turn.Cat ? 0 : 1,
+          tm: move.time,
+          ...(move.move && { mv: { x: move.move.x, y: move.move.y } }),
+          ...(move.error && { e: move.error })
+        })),
+        c: userMap.get(match.cat),
+        ch: userMap.get(match.catcher),
+        cms: match.catMoveScore,
+        chs: match.catcherMoveScore,
+        cts: match.catTimeScore,
+        chts: match.catcherTimeScore,
+        init: {
+          b: compressBoard(match.initialState.board),
+          cp: { x: match.initialState.catPosition.x, y: match.initialState.catPosition.y },
+          t: match.initialState.turn === Turn.Cat ? 0 : 1
+        }
+      };
+
+      if (!firstMatch) stream.write(',');
+      firstMatch = false;
+      stream.write(JSON.stringify(optimizedMatch));
+    }
+
+    stream.write('],"highScores":');
+
+    const optimizedHighScores = report.highScores.slice(0, 10).map(score => ({
+      u: userMap.get(score.username),
+      cms: score.catMoveScore,
+      chs: score.catcherMoveScore,
+      cts: score.catTimeScore,
+      chts: score.catcherTimeScore,
+      cs: score.catScore,
+      chs2: score.catcherScore,
+      ts: score.totalScore,
+      cw: score.catWins,
+      chw: score.catcherWins
+    }));
+
+    stream.write(JSON.stringify(optimizedHighScores));
+    stream.write('}');
+
+    stream.end(() => resolve());
+  });
 }
 
 async function main() {
@@ -541,12 +610,14 @@ async function main() {
   users = users.filter(user => fs.existsSync(`repos/${user.username}/build/bin/catchthecat`));
 
   console.log('#### Generating random boards... ####');
-  // generate 8 random boards
-  let initialStates: string[] = [];
-  for (let i = 0; i < 8; i++) {
-    let board = Board.generateRandomBoard(21);
-    initialStates.push(board);
-    console.log(`Generated board ${i + 1}/8`);
+  // generate 8 unique random boards using an array (avoid Set to reduce cost)
+  const initialStates: string[] = [];
+  while (initialStates.length < 8) {
+    const board = Board.generateRandomBoard(21);
+    if (!initialStates.includes(board)) {
+      initialStates.push(board);
+      console.log(`Generated board ${initialStates.length}/8`);
+    }
   }
 
   // run each user's catchthecat executable with the random boards
@@ -613,8 +684,9 @@ async function main() {
   competitionReport.highScores = userScores.slice(0, 10);
   
   // Generate optimized JSON report for further analysis
-  const optimizedReport = optimizeCompetitionReport(competitionReport);
-  fs.writeFileSync('src/competition_report.json', JSON.stringify(optimizedReport));
+  // const optimizedReport = optimizeCompetitionReport(competitionReport);
+  // fs.writeFileSync('src/competition_report.json', JSON.stringify(optimizedReport));
+  await writeOptimizedReportStream(competitionReport, 'src/competition_report.json');
   
   console.log('#### Competition completed! ####');
   console.log('Results saved to:');

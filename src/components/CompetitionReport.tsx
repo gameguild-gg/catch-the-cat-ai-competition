@@ -666,7 +666,7 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
             <div>
-              <div className="text-2xl font-bold">{report.highScores.length}</div>
+              <div className="text-2xl font-bold">{allUsernames.length}</div>
               <div className="text-sm text-muted-foreground">Participants</div>
             </div>
             <div>
