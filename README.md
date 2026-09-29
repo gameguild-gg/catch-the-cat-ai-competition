@@ -17,7 +17,7 @@ flowchart TD
     D --> E[Build catchthecat Executable]
     E --> F{More Repositories?}
     F -->|Yes| C
-    F -->|No| G[Generate 10 Random Initial States]
+    F -->|No| G[Generate 8 Random Initial States]
     
     G --> H{For Each Combination of 2 Executables}
     H --> I[Set: Cat Agent & Catcher Agent]
@@ -70,7 +70,7 @@ The result will be normalized by dividing the result by `N*N`.
 
 ### Time Score
 
-- The maximum time limit is `0.1s`;
+- The maximum time limit is `2s`;
 - If the time limit is reached, the other agent wins;
 - Both agents have timers that will deduct it from the `Move Score`;
 
@@ -95,7 +95,7 @@ UserScore = {
 }
 Usernames[]; // list of usernames
 UserScores = Map<UserName, UserScore>
-InitialStates[] = generateRandomInitialStates(10)
+InitialStates[] = generateRandomInitialStates(8)
 for each InitialState in InitialStates:
     for each cat in Users:
         for each catcher in Users:
@@ -115,7 +115,7 @@ This repository includes a GitHub Actions workflow that automatically builds and
 ### Workflow Features
 
 - **Automatic Deployment**: Triggers on pushes to `main` or `master` branches
-- **Daily Scheduling**: Automatically runs daily at 2 AM UTC to generate fresh reports
+- **Daily Scheduling**: Runs on a daily schedule (see `.github/workflows/deploy.yml`) to generate fresh reports
 - **Manual Deployment**: Can be triggered manually via GitHub Actions UI
 - **Report Generation**: Runs `npm run report` to generate competition data
 - **React App Build**: Builds the React application for web deployment
@@ -134,7 +134,7 @@ This repository includes a GitHub Actions workflow that automatically builds and
 The workflow is defined in `.github/workflows/deploy.yml` and includes:
 - Node.js 18 setup with npm caching
 - Smart caching for npm dependencies and cloned repositories
-- Daily scheduling (2 AM UTC) for automated report generation
+- Daily scheduling for automated report generation
 - Dependency installation
 - Competition report generation
 - React application build
