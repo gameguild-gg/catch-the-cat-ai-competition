@@ -24,7 +24,7 @@ type OutMsg =
   | { type: 'result'; move: { x: number; y: number }; timeUs: number }
   | { type: 'error'; message: string };
 
-let bot: BotModule | null = null;
+let factory: BotFactory | null = null;
 const outLines: string[] = [];
 
 function post(msg: OutMsg): void {
@@ -46,11 +46,7 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
     try {
       // Dynamically import the Emscripten ES6 module
       const mod = await import(/* @vite-ignore */ msg.botUrl);
-      const factory = mod.default as BotFactory;
-      bot = await factory({
-        print: (t: string) => outLines.push(t),
-        printErr: () => {},
-      });
+      factory = mod.default as BotFactory;
       post({ type: 'ready' });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -60,13 +56,13 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
   }
 
   if (msg.type === 'move') {
-    if (!bot) {
+    if (!factory) {
       post({ type: 'error', message: 'Bot not loaded' });
       return;
     }
 
+    // callMain() prepends the program name itself (argv[0]), so pass only real args.
     const argv = [
-      'catchthecat',
       '--headless',
       '--turn',
       msg.turn,
@@ -77,12 +73,23 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
     ];
     outLines.length = 0;
 
+    let bot: BotModule;
+    try {
+      bot = await factory({
+        print: (t: string) => outLines.push(t),
+        printErr: () => {},
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      post({ type: 'error', message: `Failed to load bot: ${message}` });
+      return;
+    }
+
     try {
       bot.callMain(argv);
     } catch (err: unknown) {
-      // Emscripten EXIT_RUNTIME=1: some versions throw ExitStatus even on
-      // success (status 0). Swallow it and proceed to parse the captured
-      // stdout; any nonzero exit is a real failure.
+      // EXIT_RUNTIME=1: first callMain may still throw ExitStatus(0) after
+      // printing. Swallow it; nonzero exit is a real failure.
       if (!isExitStatus(err)) {
         const message = err instanceof Error ? err.message : String(err);
         post({ type: 'error', message: `Bot execution error: ${message}` });

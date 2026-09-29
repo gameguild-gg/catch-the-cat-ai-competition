@@ -155,3 +155,20 @@ npm install
 npm run report  # Generate competition data
 npm start       # Start development server
 ```
+
+### Test your bot in the browser
+
+The site has an **Arena** tab: pick any two built bots, click "Run Match", and watch the game live on the hex board with per-move timings.
+
+Bots run the same headless CLI contract as the leaderboard runner: `--headless --turn <cat|catcher> --size <21> --board <string>`, with the last two stdout lines being processing time in µs and the move as `x,y`. No GUI code is compiled into the wasm builds.
+
+Build bots locally:
+```bash
+npm run build:bots              # all bots in users.json
+ONLY=<username> npm run build:bots  # one bot
+```
+Requires emsdk (auto-bootstrapped into `./emsdk` on first run). Builds land in `public/bots/` plus `manifest.json`.
+
+To test your fork before it's in users.json: clone it into `forks/<your-username>`, add yourself to `users.json`, then `ONLY=<your-username> npm run build:bots`.
+
+For the full bot interface spec, see the Steps and Rules for points sections above.
