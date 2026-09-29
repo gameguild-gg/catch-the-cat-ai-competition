@@ -39,7 +39,59 @@ ensure_emscripten() {
     log "Emscripten ready: $(emcc --version | head -1)"
 }
 
-# ---------- 2. Compile a single fork ----------
+# ---------- 2. Bridge legacy forks (examples/catchthecat + core/ layout) ----------
+# Old forks predate apps/ + core/sources/. Detect and adapt inside the fork copy:
+#   examples/catchthecat/* -> apps/catchthecat/* (patched: engine/imgui/SDL stripped)
+#   core/sources -> symlink to core/  (resolves Random.h, math/Point2D.h etc.)
+#   Point2D.cpp appended to build (defines Point2D statics/operators)
+bridge_legacy_fork() {
+    local fork_dir="$1"
+
+    mkdir -p "${fork_dir}/apps"
+    cp -R "${fork_dir}/examples/catchthecat" "${fork_dir}/apps/catchthecat"
+    ln -sfn . "${fork_dir}/core/sources"
+
+    local wh="${fork_dir}/apps/catchthecat/World.h"
+    local wc="${fork_dir}/apps/catchthecat/World.cpp"
+
+    # World.h: drop GameObject base + engine includes + GUI overrides; alias CatWorld
+    sed -i '' \
+        -e '/#include "scene\/GameObject.h"/d' \
+        -e 's/^class World : GameObject {/class World {/' \
+        -e '/void OnDraw(SDL_Renderer\* renderer) override;/d' \
+        -e '/void OnGui(ImGuiContext\* context) override;/d' \
+        -e '/void Update(float deltaTime) override;/d' \
+        -e 's/World(Engine\* pEngine, int size = 11)/World(int size = 11)/' \
+        -e 's/World(Engine\* pEngine, int mapSideSize/World(int mapSideSize/' \
+        "$wh"
+    printf '\n// wasm-arena bridge alias (upstream renamed World -> CatWorld)\nusing CatWorld = World;\n' >> "$wh"
+
+    # World.cpp: drop engine-only includes, Engine ctor params, GUI function bodies
+    sed -i '' \
+        -e '/#include "Polygon.h"/d' \
+        -e '/#include "scene\/Transform.h"/d' \
+        -e '/#include "engine\/Engine.h"/d' \
+        -e 's/World::World(Engine\* pEngine, int size) : GameObject(pEngine), /World::World(int size) : /' \
+        -e 's/World::World(Engine\* pEngine, int mapSideSize, bool isCatTurn, Point2D catPos, std::vector<bool> map)/World::World(int mapSideSize, bool isCatTurn, Point2D catPos, std::vector<bool> map)/' \
+        -e 's/    : GameObject(pEngine), sideSize(mapSideSize)/    : sideSize(mapSideSize)/' \
+        "$wc"
+    perl -0777 -pi -e 's/void World::OnDraw\(SDL_Renderer\* renderer\) \{.*?\n\}\n//s; s/void World::OnGui\(ImGuiContext\* context\) \{.*?\n\}\n//s; s/void World::Update\(float deltaTime\) \{.*?\n\}\n//s' "$wc"
+
+    # CMake: append legacy core sources (Point2D statics/operators, Random if present)
+    {
+        echo ""
+        echo "# legacy-fork bridge sources (appended by build-bots.sh)"
+        echo "file(GLOB CAT_LEGACY_SRC"
+        echo "    \${CMAKE_CURRENT_SOURCE_DIR}/core/math/Point2D.cpp"
+        echo "    \${CMAKE_CURRENT_SOURCE_DIR}/core/Random.cpp)"
+        echo "list(FILTER CAT_LEGACY_SRC EXCLUDE REGEX \"NOTHING\")"
+        echo "target_sources(\${CAT_BOT_NAME} PRIVATE \${CAT_LEGACY_SRC})"
+    } >> "${fork_dir}/CMakeLists.txt"
+
+    log "  Bridged legacy layout (examples/ -> apps/, core/sources symlink, headless World patch)"
+}
+
+# ---------- 3. Compile a single fork ----------
 compile_fork() {
     local username="$1"
     local clone_url="$2"
@@ -63,9 +115,14 @@ compile_fork() {
         }
     fi
 
-    # Validate: must have apps/catchthecat/World.h
-    if [ ! -f "${fork_dir}/apps/catchthecat/World.h" ]; then
-        warn "  No apps/catchthecat/World.h found, skipping"
+    # Validate: examples/catchthecat (legacy) or apps/catchthecat (current); legacy wins if both
+    local is_legacy=0
+    if [ -f "${fork_dir}/examples/catchthecat/World.h" ]; then
+        is_legacy=1
+    elif [ -f "${fork_dir}/apps/catchthecat/World.h" ]; then
+        is_legacy=0
+    else
+        warn "  No apps/catchthecat/World.h or examples/catchthecat/World.h found, skipping"
         return 1
     fi
 
@@ -73,7 +130,17 @@ compile_fork() {
     cp "${WASM_DIR}/wasm_main.cpp" "${fork_dir}/wasm_main.cpp"
     cp "${WASM_DIR}/CMakeLists.overlay.txt" "${fork_dir}/CMakeLists.txt"
     mkdir -p "${fork_dir}/cmake"
-    cp "${WASM_DIR}/get_cpm.cmake" "${fork_dir}/cmake/get_cpm.cmake"
+    if grep -q "CPM_HASH_SUM_PLACEHOLDER" "${WASM_DIR}/get_cpm.cmake"; then
+        warn "  wasm/get_cpm.cmake is a placeholder, fetching CPM.cmake directly"
+        curl -fsSL "https://github.com/cpm-cmake/CPM.cmake/releases/download/v0.40.2/CPM.cmake" -o "${fork_dir}/cmake/get_cpm.cmake"
+    else
+        cp "${WASM_DIR}/get_cpm.cmake" "${fork_dir}/cmake/get_cpm.cmake"
+    fi
+
+    if [ "$is_legacy" -eq 1 ]; then
+        rm -rf "${fork_dir}/apps/catchthecat"
+        bridge_legacy_fork "$fork_dir"
+    fi
 
     # Configure
     rm -rf "$build_dir"
@@ -132,7 +199,7 @@ main() {
             if ! echo ",${ONLY}," | grep -q ",${uname},"; then
                 continue
             fi
-            matched_only_entries="$(echo "$matched_only_entries" | tr ',' '\n' | grep -v "^${uname}$" | paste -sd, -)"
+            matched_only_entries="$(echo "$matched_only_entries" | tr ',' '\n' | grep -v "^${uname}$" | paste -sd, - || true)"
         fi
         usernames+=("$uname")
         repos+=("$curl")
@@ -140,16 +207,17 @@ main() {
 
     # ONLY entries that matched no corpus user count as failures
     local fail_count=0
+    local failed_list=""
     if [ -n "${ONLY:-}" ] && [ -n "$matched_only_entries" ]; then
         for missing in $(echo "$matched_only_entries" | tr ',' ' '); do
             warn "User '${missing}' (from ONLY) not found in users.json"
+            failed_list="${failed_list}${missing}(not-in-users.json) "
             fail_count=$((fail_count + 1))
         done
     fi
 
     local -a successes=()
     local success_count=0
-    local failed_list=""
 
     log "Processing ${#usernames[@]} users..."
 
@@ -169,18 +237,23 @@ main() {
         fi
     done
 
-    # Manifest: users.json order filtered to successes (always written)
-    local successes_file
-    successes_file=$(mktemp)
-    printf '%s\n' ${successes[@]+"${successes[@]}"} > "$successes_file"
-    (cd "$PROJECT_DIR" && node -e '
-        const users = require("./users.json");
-        const fs = require("fs");
-        const ok = new Set(fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean));
-        const bots = users.filter(u => ok.has(u.username)).map(u => ({username: u.username}));
-        fs.writeFileSync(process.argv[2], JSON.stringify({bots}, null, 2) + "\n");
-    ' "$successes_file" "$MANIFEST_FILE")
-    rm -f "$successes_file"
+    # Manifest: users.json order filtered to successes (always written when >=1 user processed)
+    local processed=$((success_count + fail_count))
+    if [ "$processed" -gt 0 ] || [ -n "${ONLY:-}" ]; then
+        local successes_file
+        successes_file=$(mktemp)
+        printf '%s\n' ${successes[@]+"${successes[@]}"} > "$successes_file"
+        (cd "$PROJECT_DIR" && node -e '
+            const users = require("./users.json");
+            const fs = require("fs");
+            const ok = new Set(fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean));
+            const bots = users.filter(u => ok.has(u.username)).map(u => ({username: u.username}));
+            fs.writeFileSync(process.argv[2], JSON.stringify({bots}, null, 2) + "\n");
+        ' "$successes_file" "$MANIFEST_FILE")
+        rm -f "$successes_file"
+    else
+        log "No users processed, leaving manifest untouched"
+    fi
 
     echo "" >&2
     log "========================================="
