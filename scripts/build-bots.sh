@@ -54,9 +54,10 @@ bridge_legacy_fork() {
     local wh="${fork_dir}/apps/catchthecat/World.h"
     local wc="${fork_dir}/apps/catchthecat/World.cpp"
 
-    # World.h: drop GameObject base + engine includes + GUI overrides; alias CatWorld
+    # World.h: drop GameObject base + engine/SDL includes + GUI overrides; alias CatWorld
     sed -i '' \
         -e '/#include "scene\/GameObject.h"/d' \
+        -e '/^#include "SDL[^"]*\.h"/d' \
         -e 's/^class World : GameObject {/class World {/' \
         -e '/void OnDraw(SDL_Renderer\* renderer) override;/d' \
         -e '/void OnGui(ImGuiContext\* context) override;/d' \
@@ -66,16 +67,39 @@ bridge_legacy_fork() {
         "$wh"
     printf '\n// wasm-arena bridge alias (upstream renamed World -> CatWorld)\nusing CatWorld = World;\n' >> "$wh"
 
-    # World.cpp: drop engine-only includes, Engine ctor params, GUI function bodies
+    # Old forks whose step() predates the public lastMove/moveDuration contract:
+    # expose both publicly and record the move in step() (mirrors upstream forks).
+    if ! grep -q "lastMove" "$wh"; then
+        perl -0777 -pi -e 's/^  int64_t moveDuration = 0;\n//m; s/^public:\n/public:\n  Point2D lastMove = Point2D(0, 0);\n  int64_t moveDuration = 0;\n/m' "$wh"
+        perl -pi -e 's/^(\s*auto move = (?:cat|catcher)->Move\(this\);)$/$1\n    lastMove = move;/' "$wc"
+    fi
+
+    # World.cpp: drop engine/SDL includes, Engine ctor params, GUI function bodies
     sed -i '' \
         -e '/#include "Polygon.h"/d' \
         -e '/#include "scene\/Transform.h"/d' \
         -e '/#include "engine\/Engine.h"/d' \
+        -e '/^#include "SDL[^"]*\.h"/d' \
         -e 's/World::World(Engine\* pEngine, int size) : GameObject(pEngine), /World::World(int size) : /' \
         -e 's/World::World(Engine\* pEngine, int mapSideSize, bool isCatTurn, Point2D catPos, std::vector<bool> map)/World::World(int mapSideSize, bool isCatTurn, Point2D catPos, std::vector<bool> map)/' \
         -e 's/    : GameObject(pEngine), sideSize(mapSideSize)/    : sideSize(mapSideSize)/' \
         "$wc"
-    perl -0777 -pi -e 's/void World::OnDraw\(SDL_Renderer\* renderer\) \{.*?\n\}\n//s; s/void World::OnGui\(ImGuiContext\* context\) \{.*?\n\}\n//s; s/void World::Update\(float deltaTime\) \{.*?\n\}\n//s' "$wc"
+    # Strip member GUI bodies (OnDraw/OnGui/Update) and any free helper fn whose
+    # signature mentions SDL_* (e.g. FillHexagon) — bodies end at first column-0 }
+    perl -0777 -pi -e '
+        s/void World::OnDraw\(SDL_Renderer\* renderer\) \{.*?\n\}\n//s;
+        s/void World::OnGui\(ImGuiContext\* context\) \{.*?\n\}\n//s;
+        s/void World::Update\(float deltaTime\) \{.*?\n\}\n//s;
+        s/^(?:static\s+)?\w[^;\n{}]*\([^;\n{}]*SDL_[^;\n{}]*\)\s*\n\{.*?\n\}\n//gms;
+    ' "$wc"
+
+    # Some forks use std::unordered_set without including it (leaked via engine
+    # headers on desktop); add the missing include next to the first one.
+    for f in "$wh" "$wc"; do
+        if grep -q "std::unordered_set" "$f" && ! grep -q "#include <unordered_set>" "$f"; then
+            perl -pi -e 'if (!$done && /^#include/) { print "#include <unordered_set>\n"; $done = 1 }' "$f"
+        fi
+    done
 
     # CMake: append legacy core sources (Point2D statics/operators, Random if present)
     {
