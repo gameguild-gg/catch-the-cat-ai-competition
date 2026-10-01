@@ -36,3 +36,9 @@ yarn-error.log*
 src/competition_report.json
 
 src/buildTimestamp.ts
+
+# bot build artifacts
+/forks
+/emsdk
+/public/bots
+/forks-native

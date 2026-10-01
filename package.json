@@ -9,50 +9,35 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^13.5.0",
-    "@types/jest": "^27.5.2",
-    "@types/node": "^16.18.126",
+    "@types/node": "^22.10.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-scripts": "5.0.1",
     "tailwind-merge": "^3.3.1",
-    "tailwindcss-animate": "^1.0.7",
-    "typescript": "^4.9.5",
-    "web-vitals": "^2.1.4"
+    "tailwindcss-animate": "^1.0.7"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "node scripts/generate-build-timestamp.js && react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject",
+    "start": "vite",
+    "dev": "vite",
+    "build": "node scripts/generate-build-timestamp.js && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
     "dev:ts": "tsx",
-    "report": "tsx generateReport.ts"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+    "report": "tsx generateReport.ts",
+    "build:bots": "bash scripts/build-bots.sh"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.21",
+    "jsdom": "^25.0.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.18",
-    "tsx": "^4.20.6"
+    "tsx": "^4.20.6",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.0",
+    "vitest": "^3.2.7"
   }
 }

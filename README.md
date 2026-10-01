@@ -17,7 +17,7 @@ flowchart TD
     D --> E[Build catchthecat Executable]
     E --> F{More Repositories?}
     F -->|Yes| C
-    F -->|No| G[Generate 10 Random Initial States]
+    F -->|No| G[Generate 8 Random Initial States]
     
     G --> H{For Each Combination of 2 Executables}
     H --> I[Set: Cat Agent & Catcher Agent]
@@ -70,7 +70,7 @@ The result will be normalized by dividing the result by `N*N`.
 
 ### Time Score
 
-- The maximum time limit is `0.1s`;
+- The maximum time limit is `2s`;
 - If the time limit is reached, the other agent wins;
 - Both agents have timers that will deduct it from the `Move Score`;
 
@@ -95,7 +95,7 @@ UserScore = {
 }
 Usernames[]; // list of usernames
 UserScores = Map<UserName, UserScore>
-InitialStates[] = generateRandomInitialStates(10)
+InitialStates[] = generateRandomInitialStates(8)
 for each InitialState in InitialStates:
     for each cat in Users:
         for each catcher in Users:
@@ -115,7 +115,7 @@ This repository includes a GitHub Actions workflow that automatically builds and
 ### Workflow Features
 
 - **Automatic Deployment**: Triggers on pushes to `main` or `master` branches
-- **Daily Scheduling**: Automatically runs daily at 2 AM UTC to generate fresh reports
+- **Daily Scheduling**: Runs on a daily schedule (see `.github/workflows/deploy.yml`) to generate fresh reports
 - **Manual Deployment**: Can be triggered manually via GitHub Actions UI
 - **Report Generation**: Runs `npm run report` to generate competition data
 - **React App Build**: Builds the React application for web deployment
@@ -134,7 +134,7 @@ This repository includes a GitHub Actions workflow that automatically builds and
 The workflow is defined in `.github/workflows/deploy.yml` and includes:
 - Node.js 18 setup with npm caching
 - Smart caching for npm dependencies and cloned repositories
-- Daily scheduling (2 AM UTC) for automated report generation
+- Daily scheduling for automated report generation
 - Dependency installation
 - Competition report generation
 - React application build
@@ -155,3 +155,20 @@ npm install
 npm run report  # Generate competition data
 npm start       # Start development server
 ```
+
+### Test your bot in the browser
+
+The site has an **Arena** tab: pick any two built bots, click "Run Match", and watch the game live on the hex board with per-move timings.
+
+Bots run the same headless CLI contract as the leaderboard runner: `--headless --turn <cat|catcher> --size <21> --board <string>`, with the last two stdout lines being processing time in µs and the move as `x,y`. No GUI code is compiled into the wasm builds.
+
+Build bots locally:
+```bash
+npm run build:bots              # all bots in users.json
+ONLY=<username> npm run build:bots  # one bot
+```
+Requires emsdk (auto-bootstrapped into `./emsdk` on first run). Builds land in `public/bots/` plus `manifest.json`.
+
+To test your fork before it's in users.json: clone it into `forks/<your-username>`, add yourself to `users.json`, then `ONLY=<your-username> npm run build:bots`.
+
+For the full bot interface spec, see the Steps and Rules for points sections above.

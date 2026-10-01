@@ -5,9 +5,9 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  # schedule:
-  #   # Run every 2 hours
-  #   - cron: '0 */2 * * *'
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
   workflow_dispatch: # Allow manual triggering
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
@@ -23,72 +23,89 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
-        
-    - name: Cache node_modules
-      uses: actions/cache@v4
-      with:
-        path: node_modules
-        key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
-        restore-keys: |
-          ${{ runner.os }}-node-modules-
-          
-    - name: Cache npm global cache
-      uses: actions/cache@v4
-      with:
-        path: ~/.npm
-        key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
-        restore-keys: |
-          ${{ runner.os }}-npm-
-          
+
     - name: Cache cloned repositories and dependencies
       uses: actions/cache@v4
       with:
         path: |
           ./repos
           ./deps
-        key: ${{ runner.os }}-repos-deps-${{ hashFiles('generateReport.ts') }}
+        key: ${{ runner.os }}-repos-deps-${{ hashFiles('generateReport.ts', 'users.json') }}
         restore-keys: |
           ${{ runner.os }}-repos-deps-
-        
+
+    - name: Cache emsdk
+      uses: actions/cache@v4
+      with:
+        path: ./emsdk
+        key: ${{ runner.os }}-emsdk-latest
+
+    - name: Cache forks and built bots
+      uses: actions/cache@v4
+      with:
+        path: |
+          ./forks
+          ./public/bots
+        key: ${{ runner.os }}-forks-bots-${{ hashFiles('users.json') }}
+        restore-keys: |
+          ${{ runner.os }}-forks-bots-
+
     - name: Install dependencies
       run: npm ci
-      
+
     - name: Generate competition report
+      if: github.event_name != 'pull_request'
       run: npm run report
-      
+
+    - name: Stub report for PR builds
+      if: github.event_name == 'pull_request'
+      run: node scripts/stub-report.mjs
+
+    - name: Build bot WASM modules
+      timeout-minutes: 30
+      run: |
+        if [ ! -d emsdk ]; then
+          git clone https://github.com/emscripten-core/emsdk.git emsdk
+        fi
+        ./emsdk/emsdk install latest
+        ./emsdk/emsdk activate latest
+        source ./emsdk/emsdk_env.sh
+        npm run build:bots
+
     - name: Build React application
       run: npm run build
-      
+
     - name: Setup Pages
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
       uses: actions/configure-pages@v4
       with:
         enablement: true
-      
+
     - name: Upload artifact
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
       uses: actions/upload-pages-artifact@v3
       with:
-        path: ./build
+        path: ./dist
 
   deploy:
+    needs: build-and-deploy
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-    
     steps:
     - name: Deploy to GitHub Pages
       id: deployment

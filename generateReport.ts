@@ -2,7 +2,8 @@ import { execSync, exec } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { Board, MatchReport, Position, Turn, MoveReport, UserScore, CompetitionReport } from './src/board.ts';
+import { Board, MatchReport, Position, Turn, MoveReport, UserScore, CompetitionReport } from './src/board';
+import usersData from './users.json';
 
 // Track active child processes for cleanup
 
@@ -26,75 +27,7 @@ export class UserRepository {
   repo: string = '';
 }
 
-export let users: UserRepository[] = [{
-    username: 'DPS2004',
-    repo: 'https://github.com/DPS2004/mobagen',
-}, { 
-  username: "Ceichert31",
-  repo: "https://github.com/Ceichert31/GameAI-Interactive"
-}, {
-    username: 'BrandonCherry166',
-    repo: 'https://github.com/BrandonCherry166/mobagen',
-}, {
-    username: 'ZackOlson',
-    repo: 'https://github.com/ZackOlson/mobagen',
-}, {
-    username: 'Fable-Spagat',
-    repo: 'https://github.com/Fable-Spagat/mobagen',
-}, {
-    username: 'StevenSpyro',
-    repo: 'https://github.com/StevenSpyro/mobagen',
-}, {
-    username: 'Jingles5',
-    repo: 'https://github.com/Jingles5/mobagen',
-}, {
-    username: 'pricedown',
-    repo: 'https://github.com/pricedown/mobagen',
-}, {
-    username: 'blade-x7',
-    repo: 'https://github.com/blade-x7/mobagen',
-}, {
-    username: "Nominal9977",
-    repo: "https://github.com/Nominal9977/mobagen"
-}, { 
-    username: "AndrewGenualdo",
-    repo: "https://github.com/AndrewGenualdo/ai4games-mobagen"
-}, {
-    username:  "TOAG21",
-    repo: "https://github.com/TOAG21/mobagen"
-}, {
-    username: "AnderzBruh",
-    repo: "https://github.com/AnderzBruh/mobagen"
-}, { 
-  username: "noahfreedz",
-  repo: "https://github.com/noahfreedz/AI-4-G-MOBAGEN"
-}, { 
-  username: "KFireheart",
-  repo: "https://github.com/KFireheart/AI-For-Games-mobagen"
-}, {
-  username: "Cosmey",
-  repo: "https://github.com/Cosmey/mobagenReeceEnthoven"
-}, {
-  username: "carreon-as-usual",
-  repo: "https://github.com/carreon-as-usual/mobagen"
-},
-{
-  username: "conorbyrne1",
-  repo: "https://github.com/conorbyrne1/mobagenfork"
-},
-{
-  username: "AnthonySpering",
-  repo: "https://github.com/AnthonySpering/mobagen"
-}, 
-{
-  username: "Fhomas180",
-  repo: "https://github.com/Fhomas180/ThomasFlavinmobagen"
-},
-{
-  username: "NickM111511",
-  repo: "https://github.com/NickM111511/mobagen"
-}
-];
+export let users: UserRepository[] = usersData as UserRepository[];
 
 interface MoveResult {
   move: Position | null;
