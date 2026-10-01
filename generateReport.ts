@@ -93,7 +93,12 @@ export let users: UserRepository[] = [{
 {
   username: "NickM111511",
   repo: "https://github.com/NickM111511/mobagen"
+},
+{
+  username: "AaronArchambault",
+  repo: "https://github.com/AaronArchambault/mobagen.git"
 }
+                            
 ];
 
 interface MoveResult {
