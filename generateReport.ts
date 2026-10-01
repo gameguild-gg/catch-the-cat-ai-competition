@@ -27,7 +27,11 @@ export class UserRepository {
   repo: string = '';
 }
 
-export let users: UserRepository[] = usersData as UserRepository[];
+export let users: UserRepository[] = [{
+    username: 'ColinSkaarup',
+    repo: 'https://github.com/ColinSkaarup/mobagen',
+},
+];
 
 interface MoveResult {
   move: Position | null;
