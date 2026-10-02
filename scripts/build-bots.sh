@@ -9,6 +9,8 @@ BOTS_OUTPUT_DIR="${PROJECT_DIR}/public/bots"
 MANIFEST_FILE="${BOTS_OUTPUT_DIR}/manifest.json"
 USERS_FILE="${PROJECT_DIR}/users.json"
 WASM_DIR="${PROJECT_DIR}/wasm"
+REPO_OWNER="gameguild-gg"
+REPO_NAME="catch-the-cat-ai-competition"
 
 # ---------- Colors ----------
 RED='\033[0;31m'
@@ -39,7 +41,24 @@ ensure_emscripten() {
     log "Emscripten ready: $(emcc --version | head -1)"
 }
 
-# ---------- 2. Bridge legacy forks (examples/catchthecat + core/ layout) ----------
+# ---------- 2. Fetch forks live from the GitHub API ----------
+# Emits 'username|clone_url' corpus lines on stdout. Returns non-zero on failure
+# or when no forks are found, so callers can fall back to users.json.
+fetch_forks() {
+    log "Fetching forks of ${REPO_OWNER}/${REPO_NAME} from GitHub API..."
+
+    local token_arg=()
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        token_arg=(--token "${GITHUB_TOKEN}")
+        log "Using authenticated GitHub API access"
+    else
+        warn "No GITHUB_TOKEN set — using unauthenticated API (60 req/hr limit)"
+    fi
+
+    npx tsx "${SCRIPT_DIR}/fetch-forks.ts" "$REPO_OWNER" "$REPO_NAME" ${token_arg[@]+"${token_arg[@]}"}
+}
+
+# ---------- 3. Bridge legacy forks (examples/catchthecat + core/ layout) ----------
 # Old forks predate apps/ + core/sources/. Detect and adapt inside the fork copy:
 #   examples/catchthecat/* -> apps/catchthecat/* (patched: engine/imgui/SDL stripped)
 #   core/sources -> symlink to core/  (resolves Random.h, math/Point2D.h etc.)
@@ -55,16 +74,16 @@ bridge_legacy_fork() {
     local wc="${fork_dir}/apps/catchthecat/World.cpp"
 
     # World.h: drop GameObject base + engine/SDL includes + GUI overrides; alias CatWorld
-    sed -i '' \
-        -e '/#include "scene\/GameObject.h"/d' \
-        -e '/^#include "SDL[^"]*\.h"/d' \
-        -e 's/^class World : GameObject {/class World {/' \
-        -e '/void OnDraw(SDL_Renderer\* renderer) override;/d' \
-        -e '/void OnGui(ImGuiContext\* context) override;/d' \
-        -e '/void Update(float deltaTime) override;/d' \
-        -e 's/World(Engine\* pEngine, int size = 11)/World(int size = 11)/' \
-        -e 's/World(Engine\* pEngine, int mapSideSize/World(int mapSideSize/' \
-        "$wh"
+    perl -pi -e '
+        s/#include "scene\/GameObject\.h"\n//;
+        s/^#include "SDL[^"]*\.h"\n//;
+        s/^class World : GameObject \{/class World \{/;
+        s/.*void OnDraw\(SDL_Renderer\* renderer\) override;\n//;
+        s/.*void OnGui\(ImGuiContext\* context\) override;\n//;
+        s/.*void Update\(float deltaTime\) override;\n//;
+        s/World\(Engine\* pEngine, int size = 11\)/World\(int size = 11\)/;
+        s/World\(Engine\* pEngine, int mapSideSize/World\(int mapSideSize/;
+    ' "$wh"
     printf '\n// wasm-arena bridge alias (upstream renamed World -> CatWorld)\nusing CatWorld = World;\n' >> "$wh"
 
     # Old forks whose step() predates the public lastMove/moveDuration contract:
@@ -75,15 +94,15 @@ bridge_legacy_fork() {
     fi
 
     # World.cpp: drop engine/SDL includes, Engine ctor params, GUI function bodies
-    sed -i '' \
-        -e '/#include "Polygon.h"/d' \
-        -e '/#include "scene\/Transform.h"/d' \
-        -e '/#include "engine\/Engine.h"/d' \
-        -e '/^#include "SDL[^"]*\.h"/d' \
-        -e 's/World::World(Engine\* pEngine, int size) : GameObject(pEngine), /World::World(int size) : /' \
-        -e 's/World::World(Engine\* pEngine, int mapSideSize, bool isCatTurn, Point2D catPos, std::vector<bool> map)/World::World(int mapSideSize, bool isCatTurn, Point2D catPos, std::vector<bool> map)/' \
-        -e 's/    : GameObject(pEngine), sideSize(mapSideSize)/    : sideSize(mapSideSize)/' \
-        "$wc"
+    perl -pi -e '
+        s/#include "Polygon\.h"\n//;
+        s/#include "scene\/Transform\.h"\n//;
+        s/#include "engine\/Engine\.h"\n//;
+        s/^#include "SDL[^"]*\.h"\n//;
+        s/World::World\(Engine\* pEngine, int size\) : GameObject\(pEngine\), /World::World\(int size\) : /;
+        s/World::World\(Engine\* pEngine, int mapSideSize, bool isCatTurn, Point2D catPos, std::vector<bool> map\)/World::World\(int mapSideSize, bool isCatTurn, Point2D catPos, std::vector<bool> map\)/;
+        s/    : GameObject\(pEngine\), sideSize\(mapSideSize\)/    : sideSize\(mapSideSize\)/;
+    ' "$wc"
     # Strip member GUI bodies (OnDraw/OnGui/Update) and any free helper fn whose
     # signature mentions SDL_* (e.g. FillHexagon) — bodies end at first column-0 }
     perl -0777 -pi -e '
@@ -209,12 +228,19 @@ main() {
     mkdir -p "$FORKS_DIR"
     mkdir -p "$BOTS_OUTPUT_DIR"
 
-    # Corpus: username|repo lines from users.json (preserves order)
-    local corpus
-    corpus="$(node -e "const u=require('${USERS_FILE}'); for(const e of u) console.log(e.username+'|'+e.repo)")"
+    # Corpus: discover forks live, fall back to users.json on failure
+    local corpus=""
+    local source=""
+    if corpus="$(fetch_forks)"; then
+        source="GitHub forks"
+    else
+        warn "Falling back to users.json"
+        corpus="$(node -e "const u=require('${USERS_FILE}'); for(const e of u) console.log(e.username+'|'+e.repo)")"
+        source="users.json"
+    fi
     local total
-    total="$(echo "$corpus" | wc -l | tr -d ' ')"
-    log "Loaded ${total} users from users.json"
+    total="$(printf '%s\n' "$corpus" | grep -c . || true)"
+    log "Loaded ${total} entries from ${source}"
 
     # ONLY filter (comma-separated usernames)
     local -a usernames=()
@@ -265,19 +291,18 @@ main() {
         fi
     done
 
-    # Manifest: users.json order filtered to successes (always written when >=1 user processed)
+    # Manifest: discovered/filtered entries filtered to successes
     local processed=$((success_count + fail_count))
     if [ "$processed" -gt 0 ] || [ -n "${ONLY:-}" ]; then
         local successes_file
         successes_file=$(mktemp)
         printf '%s\n' ${successes[@]+"${successes[@]}"} > "$successes_file"
-        (cd "$PROJECT_DIR" && node -e '
-            const users = require("./users.json");
+        node -e '
             const fs = require("fs");
             const ok = new Set(fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean));
-            const bots = users.filter(u => ok.has(u.username)).map(u => ({username: u.username}));
+            const bots = [...ok].map(username => ({username}));
             fs.writeFileSync(process.argv[2], JSON.stringify({bots}, null, 2) + "\n");
-        ' "$successes_file" "$MANIFEST_FILE")
+        ' "$successes_file" "$MANIFEST_FILE"
         rm -f "$successes_file"
     else
         log "No users processed, leaving manifest untouched"

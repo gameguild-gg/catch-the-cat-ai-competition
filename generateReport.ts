@@ -27,19 +27,12 @@ export class UserRepository {
   repo: string = '';
 }
 
-export let users: UserRepository[] = [{
-    username: 'ColinSkaarup',
-    repo: 'https://github.com/ColinSkaarup/mobagen',
-},
-{
-  username: "AaronArchambault",
-  repo: "https://github.com/AaronArchambault/mobagen.git"
-},
-{
-  username: "lukehinojosa",
-  repo: "https://github.com/lukehinojosa/mobagen"
-}
-];
+export let users: UserRepository[] = usersData.map(({ username, repo }) => {
+  const user = new UserRepository();
+  user.username = username;
+  user.repo = repo;
+  return user;
+});
 
 interface MoveResult {
   move: Position | null;
@@ -530,6 +523,12 @@ async function main() {
   const parallelJobs = getOptimalParallelJobs();
   console.log(`Using ${parallelJobs} parallel jobs for compilation (detected ${os.cpus().length} CPU cores)`);
 
+  const buildFailures: string[] = [];
+  const recordFailure = (user: UserRepository, stage: string, error: unknown) => {
+    console.error(`❌ ${stage} failed for ${user.username}: ${error instanceof Error ? error.message : String(error)}`);
+    if (!buildFailures.includes(user.username)) buildFailures.push(user.username);
+  };
+
   console.log('#### Configuring projects... ####');
   // run cmake configure and build the executable target catchthecat
   for (const user of users) {
@@ -537,7 +536,7 @@ async function main() {
     try {
       execSync(`cd repos/${user.username} && cmake -B build -DCPM_SOURCE_CACHE=${depsDir}`, { stdio: 'inherit' });
     } catch (error) {
-      console.log(`❌ Configuration failed for ${user.username}: ${error}`);
+      recordFailure(user, 'Configuration', error);
     }
   }
 
@@ -547,12 +546,20 @@ async function main() {
     try {
       execSync(`cd repos/${user.username} && cmake --build build --target catchthecat --parallel ${parallelJobs}`, { stdio: 'inherit' });
     } catch (error) {
-      console.log(`❌ Build failed for ${user.username}: ${error}`);
+      recordFailure(user, 'Build', error);
     }
   }
 
   // leave only the users that have a valid compilation
   users = users.filter(user => fs.existsSync(`repos/${user.username}/build/bin/catchthecat`));
+
+  if (buildFailures.length > 0) {
+    console.warn(`⚠️ ${buildFailures.length} bot(s) failed to configure/build: ${buildFailures.join(', ')}`);
+  }
+  console.log(`#### ${users.length}/${users.length + buildFailures.length} bots built successfully ####`);
+  if (users.length === 0) {
+    throw new Error('No bots built successfully — refusing to write an empty competition report.');
+  }
 
   console.log('#### Generating random boards... ####');
   // generate 8 unique random boards using an array (avoid Set to reduce cost)

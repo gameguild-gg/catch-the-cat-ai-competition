@@ -4,61 +4,43 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Select } from '../components/ui/select';
 import { HexagonalBoard } from '../components/HexagonalBoard';
-import { Board, Turn, Position } from '../board';
+import { Board, Position } from '../board';
+import {
+  ArenaMove,
+  BOARD_SIZE,
+  MOVE_DELAY_MS,
+  runSingleMatch,
+  WinnerInfo,
+} from './match';
+import {
+  TournamentFormat,
+  RoundRobinPairing,
+  Standing,
+  applyStandingResult,
+  createStandings,
+  roundRobinPairings,
+  buildDoubleElimination,
+  allMatches,
+  nextReadyMatch,
+  recordMatchResult,
+  isTournamentFinished,
+  getChampion,
+  type TournamentMatch,
+} from './tournament';
 
 interface ArenaProps {}
 
-interface ArenaMove {
-  n: number;
-  username: string;
-  turn: Turn;
-  move: { x: number; y: number };
-  timeUs?: number;
-}
+type Mode = 'single' | 'tournament';
 
-type WorkerReply =
-  | { type: 'ready' }
-  | { type: 'result'; move: { x: number; y: number }; timeUs: number }
-  | { type: 'error'; message: string };
+const DEFAULT_MOVE_LIMIT = 600;
 
-const BOARD_SIZE = 21;
-const MOVE_TIMEOUT_MS = 2000;
-const MOVE_DELAY_MS = 300;
-const MAX_MOVES = BOARD_SIZE * BOARD_SIZE;
-
-function workerRequest(worker: Worker, msg: { type: 'load'; botUrl: string }, expect: 'ready', timeoutMs: number): Promise<{ type: 'ready' }>;
-function workerRequest(worker: Worker, msg: { type: 'move'; turn: 'cat' | 'catcher'; size: number; board: string }, expect: 'result', timeoutMs: number): Promise<{ type: 'result'; move: { x: number; y: number }; timeUs: number }>;
-function workerRequest(
-  worker: Worker,
-  msg: { type: 'load'; botUrl: string } | { type: 'move'; turn: 'cat' | 'catcher'; size: number; board: string },
-  expect: 'ready' | 'result',
-  timeoutMs: number
-): Promise<{ type: 'ready' } | { type: 'result'; move: { x: number; y: number }; timeUs: number }> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      worker.removeEventListener('message', onMsg);
-      reject(new Error(`Timeout after ${timeoutMs}ms waiting for '${expect}'`));
-    }, timeoutMs);
-    const onMsg = (e: MessageEvent<WorkerReply>) => {
-      const d = e.data;
-      if (d.type === 'error') {
-        clearTimeout(timer);
-        worker.removeEventListener('message', onMsg);
-        reject(new Error(d.message));
-        return;
-      }
-      if (d.type !== expect) return;
-      clearTimeout(timer);
-      worker.removeEventListener('message', onMsg);
-      resolve(d);
-    };
-    worker.addEventListener('message', onMsg);
-    worker.postMessage(msg);
-  });
+function winnerName(outcome: WinnerInfo | null): string | null {
+  return outcome ? outcome.username : null;
 }
 
 export function Arena({}: ArenaProps) {
   const [bots, setBots] = useState<string[] | null>(null);
+  const [mode, setMode] = useState<Mode>('single');
   const [catBot, setCatBot] = useState('');
   const [catcherBot, setCatcherBot] = useState('');
   const [boardString, setBoardString] = useState(() => Board.generateRandomBoard(BOARD_SIZE));
@@ -68,8 +50,20 @@ export function Arena({}: ArenaProps) {
   const [moves, setMoves] = useState<ArenaMove[]>([]);
   const [displayBoard, setDisplayBoard] = useState<string | null>(null);
   const [displayCat, setDisplayCat] = useState({ x: 0, y: 0 });
-  const [winner, setWinner] = useState<{ side: 'cat' | 'catcher'; username: string } | null>(null);
+  const [winner, setWinner] = useState<WinnerInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Tournament state
+  const [selectedBots, setSelectedBots] = useState<string[]>([]);
+  const [format, setFormat] = useState<TournamentFormat>('round-robin');
+  const [moveLimit, setMoveLimit] = useState(DEFAULT_MOVE_LIMIT);
+  const [tournamentRunning, setTournamentRunning] = useState(false);
+  const [rrStandings, setRrStandings] = useState<Standing[]>([]);
+  const [rrPairings, setRrPairings] = useState<RoundRobinPairing[]>([]);
+  const [rrProgress, setRrProgress] = useState('');
+  const [bracket, setBracket] = useState<TournamentMatch[]>([]);
+  const [bracketChampion, setBracketChampion] = useState<string | null>(null);
+  const [tournamentLog, setTournamentLog] = useState<string[]>([]);
 
   const stopRef = useRef(false);
 
@@ -90,6 +84,7 @@ export function Arena({}: ArenaProps) {
           setCatBot(names[0]);
           setCatcherBot(names[0]);
         }
+        setSelectedBots(names);
       })
       .catch(() => setBots([]));
   }, []);
@@ -123,131 +118,120 @@ export function Arena({}: ArenaProps) {
     setMoves([]);
     stopRef.current = false;
 
-    const catWorker = new Worker(new URL('./arena.worker.ts', import.meta.url), { type: 'module' });
-    const catcherWorker = new Worker(new URL('./arena.worker.ts', import.meta.url), { type: 'module' });
+    const outcome = await runSingleMatch(catBot, catcherBot, boardString, {
+      isStopped: () => stopRef.current,
+      onProgress: (progress) => {
+        setDisplayBoard(progress.board);
+        setDisplayCat(progress.cat);
+        setMoves(progress.moves);
+      },
+    });
+
+    if (outcome.error) setError(outcome.error);
+    if (!stopRef.current) setWinner(outcome.winner);
+
+    setRunning(false);
+  }, [catBot, catcherBot, boardString]);
+
+  const toggleBot = useCallback((name: string) => {
+    setSelectedBots((prev) => (prev.includes(name) ? prev.filter((b) => b !== name) : [...prev, name]));
+  }, []);
+
+  const stopTournament = useCallback(() => {
+    stopRef.current = true;
+  }, []);
+
+  const runTournament = useCallback(async () => {
+    const entrants = bots ? bots.filter((b) => selectedBots.includes(b)) : [];
+    if (entrants.length < 2) return;
+    setTournamentRunning(true);
+    setError(null);
+    setWinner(null);
+    setMoves([]);
+    setTournamentLog([]);
+    setBracketChampion(null);
+    stopRef.current = false;
 
     try {
-      // Load both bots
-      await Promise.all([
-        workerRequest(catWorker, { type: 'load', botUrl: `${import.meta.env.BASE_URL}bots/${catBot}.js` }, 'ready', MOVE_TIMEOUT_MS * 5),
-        workerRequest(catcherWorker, { type: 'load', botUrl: `${import.meta.env.BASE_URL}bots/${catcherBot}.js` }, 'ready', MOVE_TIMEOUT_MS * 5),
-      ]);
+      if (format === 'round-robin') {
+        const pairings = roundRobinPairings(entrants);
+        setRrPairings(pairings);
+        let standings = createStandings(entrants);
+        setRrStandings(standings);
 
-      const board = new Board(boardString, new Position(0, 0), catBot, catcherBot);
-      setDisplayBoard(board.getBoardString());
-      setDisplayCat({ x: 0, y: 0 });
+        const limit = Math.min(pairings.length, moveLimit);
+        for (let i = 0; i < limit; i += 1) {
+          if (stopRef.current) break;
+          const { cat, catcher } = pairings[i];
+          setRrProgress(`${i} / ${limit} — ${cat} (cat) vs ${catcher} (catcher)`);
+          setCatBot(cat);
+          setCatcherBot(catcher);
 
-      let moveCount = 0;
-      let localMoves: ArenaMove[] = [];
-
-      while (moveCount < MAX_MOVES && !stopRef.current) {
-        const gameResult = board.getGameResult();
-        if (gameResult.isOver) {
-          if (gameResult.winner) {
-            setWinner({
-              side: gameResult.winner === Turn.Cat ? 'cat' : 'catcher',
-              username: gameResult.winner === Turn.Cat ? catBot : catcherBot,
-            });
-          }
-          break;
-        }
-
-        const isCatTurn = board.turn === Turn.Cat;
-        const worker = isCatTurn ? catWorker : catcherWorker;
-        const username = isCatTurn ? catBot : catcherBot;
-
-        let result: Extract<WorkerReply, { type: 'result' }> | null = null;
-        let failure: string | null = null;
-        try {
-          result = await workerRequest(
-            worker,
-            { type: 'move', turn: isCatTurn ? 'cat' : 'catcher', size: BOARD_SIZE, board: board.getBoardString() },
-            'result',
-            MOVE_TIMEOUT_MS
-          );
-        } catch (e) {
-          failure = e instanceof Error ? e.message : String(e);
-        }
-
-        if (failure || !result) {
-          // Timeout or worker error → other side wins immediately
-          setMoves((m) => [
-            ...m,
-            {
-              n: moveCount + 1,
-              username,
-              turn: board.turn,
-              move: { x: 0, y: 0 },
-              timeUs: undefined,
+          const outcome = await runSingleMatch(cat, catcher, boardString, {
+            isStopped: () => stopRef.current,
+            onProgress: (progress) => {
+              setDisplayBoard(progress.board);
+              setDisplayCat(progress.cat);
+              setMoves(progress.moves);
             },
-          ]);
-          setWinner({
-            side: isCatTurn ? 'catcher' : 'cat',
-            username: isCatTurn ? catcherBot : catBot,
           });
-          setError(failure ? `${username} failed: ${failure}` : null);
-          break;
-        }
+          if (stopRef.current) break;
 
-        try {
-          board.move(new Position(result.move.x, result.move.y));
-        } catch (e) {
-          // Invalid move → other side wins
-          const msg = e instanceof Error ? e.message : String(e);
-          setMoves((m) => [
-            ...m,
-            {
-              n: moveCount + 1,
-              username,
-              turn: board.turn,
-              move: result!.move,
-              timeUs: result!.timeUs,
-            },
-          ]);
-          setWinner({ side: isCatTurn ? 'catcher' : 'cat', username: isCatTurn ? catcherBot : catBot });
-          setError(`${username} invalid move: ${msg}`);
-          break;
-        }
-
-        moveCount++;
-        const newMove: ArenaMove = {
-          n: moveCount,
-          username,
-          turn: isCatTurn ? Turn.Cat : Turn.Catcher,
-          move: { x: result.move.x, y: result.move.y },
-          timeUs: result.timeUs,
-        };
-        localMoves = [...localMoves, newMove];
-        setMoves(localMoves);
-        setDisplayBoard(board.getBoardString());
-        setDisplayCat({ x: board.catPosition.x, y: board.catPosition.y });
-
-        if (board.getGameResult().isOver) {
-          const final = board.getGameResult();
-          if (final.winner) {
-            setWinner({
-              side: final.winner === Turn.Cat ? 'cat' : 'catcher',
-              username: final.winner === Turn.Cat ? catBot : catcherBot,
-              });
+          const w = winnerName(outcome.winner);
+          if (w) {
+            const loser = w === cat ? catcher : cat;
+            standings = applyStandingResult(standings, w, loser);
+            setRrStandings(standings);
+            setTournamentLog((log) => [...log, `${w} def. ${loser}`]);
           }
-          break;
+        }
+        setRrProgress((p) =>
+          stopRef.current
+            ? `${p} (stopped)`
+            : `${limit} / ${limit} — done`,
+        );
+      } else {
+        const tournament = buildDoubleElimination(entrants);
+        setBracket(allMatches(tournament));
+
+        let guard = 0;
+        while (!stopRef.current) {
+          const match = nextReadyMatch(tournament);
+          if (!match || match.a === null || match.b === null) break;
+          if (guard++ > entrants.length * entrants.length * 4) break;
+
+          setTournamentLog((log) => [
+            ...log,
+            `${match.bracket === 'GF' ? 'Grand final' : `[${match.bracket}${match.round + 1}]`} ${match.a} (cat) vs ${match.b} (catcher)`,
+          ]);
+          setCatBot(match.a);
+          setCatcherBot(match.b);
+
+          const outcome = await runSingleMatch(match.a, match.b, boardString, {
+            isStopped: () => stopRef.current,
+            onProgress: (progress) => {
+              setDisplayBoard(progress.board);
+              setDisplayCat(progress.cat);
+              setMoves(progress.moves);
+            },
+          });
+          if (stopRef.current) break;
+
+          const w = winnerName(outcome.winner) ?? match.a;
+          recordMatchResult(tournament, match, w);
+          setBracket(allMatches(tournament));
         }
 
-        await new Promise((r) => setTimeout(r, MOVE_DELAY_MS));
-      }
-
-      if (!stopRef.current && !winner) {
-        // 441-move cap reached without a game-over: catcher wins by not losing
-        setWinner((w) => w ?? { side: 'catcher', username: catcherBot });
+        if (!stopRef.current && isTournamentFinished(tournament)) {
+          setBracketChampion(getChampion(tournament));
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      catWorker.terminate();
-      catcherWorker.terminate();
-      setRunning(false);
+      setTournamentRunning(false);
     }
-  }, [catBot, catcherBot, boardString]);
+  }, [bots, selectedBots, format, boardString, moveLimit]);
 
   const boardForDisplay = displayBoard ?? boardString;
 
@@ -269,18 +253,41 @@ export function Arena({}: ArenaProps) {
         <CardContent className="p-8 text-center">
           <p className="text-muted-foreground">No bots found. Run `npm run build:bots` first.</p>
         </CardContent>
-     </Card>
+      </Card>
     );
   }
+
+  const bracketByKind = (kind: 'WB' | 'LB' | 'GF') => bracket.filter((m) => m.bracket === kind);
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">⚔️ Arena</CardTitle>
-          <CardDescription>Watch two bots play catch the cat live in your browser</CardDescription>
+          <CardDescription>
+            Watch bots play catch the cat live, one match or a whole tournament
+          </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-6 flex gap-2">
+            <Button
+              variant={mode === 'single' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setMode('single')}
+              disabled={running || tournamentRunning}
+            >
+              Single match
+            </Button>
+            <Button
+              variant={mode === 'tournament' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setMode('tournament')}
+              disabled={running || tournamentRunning}
+            >
+              Tournament
+            </Button>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left: board */}
             <div className="bg-muted rounded border overflow-x-auto">
@@ -289,95 +296,279 @@ export function Arena({}: ArenaProps) {
 
             {/* Right: controls + moves */}
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Cat bot</label>
-                  <Select value={catBot} onChange={(e) => setCatBot(e.target.value)} disabled={running}>
-                    {bots.map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Catcher bot</label>
-                  <Select value={catcherBot} onChange={(e) => setCatcherBot(e.target.value)} disabled={running}>
-                    {bots.map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </Select>
-                </div>
-              </div>
+              {mode === 'single' && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Cat bot</label>
+                      <Select value={catBot} onChange={(e) => setCatBot(e.target.value)} disabled={running}>
+                        {bots.map((b) => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Catcher bot</label>
+                      <Select value={catcherBot} onChange={(e) => setCatcherBot(e.target.value)} disabled={running}>
+                        {bots.map((b) => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
 
-              {catBot === catcherBot && (
-                <p className="text-sm text-destructive">Pick two distinct bots to run a match.</p>
+                  {catBot === catcherBot && (
+                    <p className="text-sm text-destructive">Pick two distinct bots to run a match.</p>
+                  )}
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Button onClick={newRandomBoard} variant="outline" size="sm" disabled={running}>
+                        New random board
+                      </Button>
+                      <Button
+                        onClick={runMatch}
+                        size="sm"
+                        disabled={running || catBot === catcherBot}
+                      >
+                        {running ? 'Running…' : 'Run match'}
+                      </Button>
+                    </div>
+                    <textarea
+                      className="w-full h-20 p-2 text-xs font-mono rounded border bg-background"
+                      placeholder="Paste a 441-char board ([.#C], exactly one C) to load"
+                      value={boardText}
+                      onChange={(e) => setBoardText(e.target.value)}
+                      disabled={running}
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button onClick={loadBoard} variant="outline" size="sm" disabled={running}>
+                        Load board
+                      </Button>
+                      {boardError && <span className="text-xs text-destructive">{boardError}</span>}
+                    </div>
+                  </div>
+
+                  {winner && (
+                    <div className="rounded border p-3 text-sm">
+                      🏆 <span className="font-medium">{winner.username}</span> wins as {winner.side}
+                    </div>
+                  )}
+                  {error && <p className="text-sm text-destructive">{error}</p>}
+                </>
               )}
 
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Button onClick={newRandomBoard} variant="outline" size="sm" disabled={running}>
-                    New random board
-                  </Button>
-                  <Button onClick={loadBoard} variant="outline" size="sm" disabled={running}>
-                    Load board
-                  </Button>
-                </div>
-                <textarea
-                  readOnly={running}
-                  value={boardText || boardString}
-                  onChange={(e) => setBoardText(e.target.value)}
-                  className={`w-full h-24 font-mono text-xs p-2 rounded border break-all ${
-                    boardError ? 'border-red-500' : 'border-input bg-background'
-                  }`}
-                />
-                {boardError && <p className="text-sm text-destructive">{boardError}</p>}
-              </div>
+              {mode === 'tournament' && (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">
+                      Entrants ({selectedBots.length}/{bots.length})
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {bots.map((b) => (
+                        <label
+                          key={b}
+                          className={`flex items-center gap-1 rounded border px-2 py-1 text-xs ${
+                            selectedBots.includes(b) ? 'bg-primary/10 border-primary' : ''
+                          } ${tournamentRunning ? 'opacity-60' : 'cursor-pointer'}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedBots.includes(b)}
+                            onChange={() => toggleBot(b)}
+                            disabled={tournamentRunning}
+                          />
+                          {b}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 text-xs">
+                      <button
+                        className="underline"
+                        onClick={() => setSelectedBots(bots)}
+                        disabled={tournamentRunning}
+                      >
+                        Select all
+                      </button>
+                      <button className="underline" onClick={() => setSelectedBots([])} disabled={tournamentRunning}>
+                        Clear
+                      </button>
+                    </div>
+                  </div>
 
-              <div className="flex items-center gap-2">
-                <Button onClick={runMatch} disabled={running || !catBot || !catcherBot || catBot === catcherBot}>
-                  {running ? 'Running…' : 'Run Match'}
-                </Button>
-                {running && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      stopRef.current = true;
-                    }}
-                  >
-                    Stop
-                  </Button>
-                )}
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Format</label>
+                      <Select
+                        value={format}
+                        onChange={(e) => setFormat(e.target.value as TournamentFormat)}
+                        disabled={tournamentRunning}
+                      >
+                        <option value="round-robin">Round robin</option>
+                        <option value="double-elimination">Double elimination</option>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Max matches</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={500}
+                        className="w-full p-2 text-sm rounded border bg-background"
+                        value={moveLimit}
+                        onChange={(e) => setMoveLimit(Math.max(1, Number(e.target.value) || 1))}
+                        disabled={tournamentRunning}
+                      />
+                    </div>
+                  </div>
 
-              {winner && (
-                <div className="p-3 bg-green-50 border border-green-200 rounded text-sm">
-                  🏆 {winner.side === 'cat' ? `Cat ${winner.username} escapes!` : `Catcher ${winner.username} wins!`}
-                  <span className="ml-2 text-muted-foreground">({moves.length} moves)</span>
-                </div>
-              )}
-              {error && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-destructive break-words">
-                  {error}
-                </div>
-              )}
-
-              <div className="space-y-1 max-h-72 overflow-y-auto">
-                {moves.map((m) => (
-                  <div key={m.n} className="text-xs font-mono flex items-center gap-2">
-                    <span className="text-muted-foreground w-8">{m.n}.</span>
-                    <Badge variant={m.turn === 'cat' ? 'default' : 'secondary'}>{m.username}</Badge>
-                    <span>
-                      → ({m.move.x},{m.move.y})
-                    </span>
-                    {m.timeUs !== undefined && (
-                      <span className="text-muted-foreground">[{(m.timeUs / 1000).toFixed(1)}ms]</span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={runTournament}
+                      size="sm"
+                      disabled={tournamentRunning || selectedBots.length < 2}
+                    >
+                      {tournamentRunning ? 'Running…' : 'Run tournament'}
+                    </Button>
+                    {tournamentRunning && (
+                      <Button onClick={stopTournament} variant="outline" size="sm">
+                        Stop
+                      </Button>
+                    )}
+                    {selectedBots.length < 2 && (
+                      <span className="text-xs text-muted-foreground">Select at least 2 bots.</span>
                     )}
                   </div>
-                ))}
-              </div>
+
+                  <div className="space-y-2">
+                    <Button onClick={newRandomBoard} variant="outline" size="sm" disabled={tournamentRunning}>
+                      New random board
+                    </Button>
+                  </div>
+
+                  {winner && (
+                    <div className="rounded border p-3 text-sm">
+                      🏆 <span className="font-medium">{winner.username}</span> wins as {winner.side}
+                    </div>
+                  )}
+                  {error && <p className="text-sm text-destructive">{error}</p>}
+                </>
+              )}
+
+              {moves.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Moves ({moves.length})</p>
+                  <div className="max-h-40 overflow-y-auto rounded border text-xs">
+                    {moves
+                      .slice()
+                      .reverse()
+                      .map((m) => (
+                        <div key={m.n} className="flex justify-between border-b px-2 py-1 last:border-b-0">
+                          <span>
+                            {m.n}. {m.username} ({m.turn})
+                          </span>
+                          <span className="font-mono">
+                            ({m.move.x},{m.move.y})
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {mode === 'tournament' && format === 'round-robin' && rrStandings.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Round robin standings</CardTitle>
+            {rrProgress && <CardDescription>{rrProgress}</CardDescription>}
+          </CardHeader>
+          <CardContent>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-muted-foreground">
+                  <th className="py-1">#</th>
+                  <th>Bot</th>
+                  <th>W</th>
+                  <th>L</th>
+                  <th>Pts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rrStandings.map((s, i) => (
+                  <tr key={s.bot} className="border-t">
+                    <td className="py-1">{i + 1}</td>
+                    <td>{s.bot}</td>
+                    <td>{s.wins}</td>
+                    <td>{s.losses}</td>
+                    <td>{s.points}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {rrPairings.length > 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">{rrPairings.length} scheduled matches</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {mode === 'tournament' && format === 'double-elimination' && bracket.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Double-elimination bracket</CardTitle>
+            {bracketChampion && (
+              <CardDescription>🏆 Champion: {bracketChampion}</CardDescription>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {(['WB', 'LB', 'GF'] as const).map((kind) => {
+              const matches = bracketByKind(kind);
+              if (matches.length === 0) return null;
+              const title = kind === 'WB' ? 'Winners' : kind === 'LB' ? 'Losers' : 'Grand final';
+              return (
+                <div key={kind}>
+                  <p className="mb-1 text-sm font-medium">{title}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {matches.map((m) => (
+                      <div
+                        key={m.id}
+                        className={`rounded border px-2 py-1 text-xs ${m.status === 'done' ? 'bg-muted' : ''}`}
+                        title={m.id}
+                      >
+                        <div className={m.winner === m.a && m.a ? 'font-medium' : ''}>
+                          {m.a ?? '—'}: {m.winner === m.a && m.a ? 'W' : ''}
+                        </div>
+                        <div className={m.winner === m.b && m.b ? 'font-medium' : ''}>
+                          {m.b ?? '—'}: {m.winner === m.b && m.b ? 'W' : ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {mode === 'tournament' && tournamentLog.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Match log</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-60 space-y-1 overflow-y-auto text-xs font-mono">
+              {tournamentLog.map((entry, i) => (
+                <div key={i}>{entry}</div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

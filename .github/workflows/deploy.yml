@@ -10,14 +10,7 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch: # Allow manual triggering
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+# Permissions defined per-job to support fork pull requests safely
 concurrency:
   group: "pages"
   cancel-in-progress: false
@@ -25,6 +18,8 @@ concurrency:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
     - name: Checkout repository
@@ -65,12 +60,24 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
+    # SDL/ImGui in the student repos need X11/GL dev headers to configure on Linux
+    - name: Install system libraries for native bot builds
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake mesa-common-dev libgl1-mesa-dev \
+          libx11-dev libgl-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+          libxss-dev libxtst-dev libxext-dev libxfixes-dev libxkbcommon-dev \
+          libxcb1-dev libx11-xcb-dev libwayland-dev libdecor-0-dev libasound2-dev \
+          libpulse-dev libudev-dev libdrm-dev libgbm-dev libegl1-mesa-dev \
+          libusb-1.0-0-dev libxrender-dev libxkbcommon-x11-dev libdbus-1-dev libibus-1.0-dev
+
     # ccache: reuse compiled SDL2/ImGui/glm across the 21 fork builds
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1
       with:
         key: ${{ runner.os }}-ccache
         max-size: 2G
+        update-package-index: true
 
     - name: Generate competition report
       if: github.event_name != 'pull_request'
@@ -115,6 +122,10 @@ jobs:
     needs: build-and-deploy
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
