@@ -166,6 +166,10 @@ compile_fork() {
         bridge_legacy_fork "$fork_dir"
     fi
 
+    # share CPM downloads with the native report build
+    export CPM_SOURCE_CACHE="${PROJECT_DIR}/deps"
+    mkdir -p "$CPM_SOURCE_CACHE"
+
     # Configure
     rm -rf "$build_dir"
     log "  Configuring CMake..."
