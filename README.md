@@ -1,6 +1,7 @@
 # Catch The Cat AI Competition
 
 This repo contains the code for running the competition of AI agents for the catch the cat game.
+Track the highscore here: https://gameguild-gg.github.io/catch-the-cat-ai-competition/
 
 ## Rules
 
