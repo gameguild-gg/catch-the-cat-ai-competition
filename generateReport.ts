@@ -3,7 +3,6 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { Board, MatchReport, Position, Turn, MoveReport, UserScore, CompetitionReport } from './src/board';
-import usersData from './users.json';
 
 // Track active child processes for cleanup
 
@@ -26,13 +25,19 @@ export class UserRepository {
   username: string = '';
   repo: string = '';
 }
-
-export let users: UserRepository[] = usersData.map(({ username, repo }) => {
-  const user = new UserRepository();
-  user.username = username;
-  user.repo = repo;
-  return user;
-});
+export let users: UserRepository[] = [{
+    username: 'ColinSkaarup',
+    repo: 'https://github.com/ColinSkaarup/mobagen',
+},
+{
+  username: "AaronArchambault",
+  repo: "https://github.com/AaronArchambault/mobagen.git"
+},
+{
+  username: "lukehinojosa",
+  repo: "https://github.com/lukehinojosa/mobagen"
+}
+];
 
 interface MoveResult {
   move: Position | null;
