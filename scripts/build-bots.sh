@@ -10,7 +10,7 @@ MANIFEST_FILE="${BOTS_OUTPUT_DIR}/manifest.json"
 USERS_FILE="${PROJECT_DIR}/users.json"
 WASM_DIR="${PROJECT_DIR}/wasm"
 REPO_OWNER="gameguild-gg"
-REPO_NAME="catch-the-cat-ai-competition"
+REPO_NAME="mobagen"
 
 # ---------- Colors ----------
 RED='\033[0;31m'
