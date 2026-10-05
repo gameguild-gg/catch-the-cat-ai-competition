@@ -134,6 +134,7 @@ export interface TournamentMatch {
   status: MatchStatus;
   nextWinner: MatchRef | null;
   nextLoser: MatchRef | null;
+  scoreSummary?: string;
 }
 
 export interface Tournament {

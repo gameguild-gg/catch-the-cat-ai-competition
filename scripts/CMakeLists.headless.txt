@@ -1,0 +1,19 @@
+cmake_minimum_required(VERSION 3.16)
+project(catchthecat-headless CXX)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/get_cpm.cmake)
+CPMAddPackage(NAME glm GITHUB_REPOSITORY g-truc/glm GIT_TAG 1.0.1)
+
+file(GLOB CAT_BOT_SRC CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/apps/catchthecat/*.cpp)
+list(FILTER CAT_BOT_SRC EXCLUDE REGEX "main\\.cpp$")
+
+file(GLOB CAT_LEGACY_SRC CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/math/Point2D.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/Random.cpp)
+
+add_executable(catchthecat ${CAT_BOT_SRC} ${CAT_LEGACY_SRC} ${CMAKE_CURRENT_SOURCE_DIR}/wasm_main.cpp)
+target_include_directories(catchthecat PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/apps/catchthecat ${CMAKE_CURRENT_SOURCE_DIR}/core/sources)
+target_link_libraries(catchthecat PRIVATE glm::glm)

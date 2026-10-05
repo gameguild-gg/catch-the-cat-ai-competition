@@ -25,6 +25,7 @@ type OutMsg =
   | { type: 'error'; message: string };
 
 let factory: BotFactory | null = null;
+let botInstance: BotModule | null = null;
 const outLines: string[] = [];
 
 function post(msg: OutMsg): void {
@@ -47,6 +48,10 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
       // Dynamically import the Emscripten ES6 module
       const mod = await import(/* @vite-ignore */ msg.botUrl);
       factory = mod.default as BotFactory;
+      botInstance = await factory({
+        print: (t: string) => outLines.push(t),
+        printErr: () => {},
+      });
       post({ type: 'ready' });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -56,9 +61,22 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
   }
 
   if (msg.type === 'move') {
-    if (!factory) {
-      post({ type: 'error', message: 'Bot not loaded' });
-      return;
+    if (!botInstance) {
+      if (factory) {
+        try {
+          botInstance = await factory({
+            print: (t: string) => outLines.push(t),
+            printErr: () => {},
+          });
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          post({ type: 'error', message: `Failed to instantiate bot: ${message}` });
+          return;
+        }
+      } else {
+        post({ type: 'error', message: 'Bot not loaded' });
+        return;
+      }
     }
 
     // callMain() prepends the program name itself (argv[0]), so pass only real args.
@@ -73,23 +91,9 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
     ];
     outLines.length = 0;
 
-    let bot: BotModule;
     try {
-      bot = await factory({
-        print: (t: string) => outLines.push(t),
-        printErr: () => {},
-      });
+      botInstance.callMain(argv);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      post({ type: 'error', message: `Failed to load bot: ${message}` });
-      return;
-    }
-
-    try {
-      bot.callMain(argv);
-    } catch (err: unknown) {
-      // EXIT_RUNTIME=1: first callMain may still throw ExitStatus(0) after
-      // printing. Swallow it; nonzero exit is a real failure.
       if (!isExitStatus(err)) {
         const message = err instanceof Error ? err.message : String(err);
         post({ type: 'error', message: `Bot execution error: ${message}` });

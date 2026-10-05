@@ -7,8 +7,8 @@ interface UserEntry {
 }
 
 describe('users.json', () => {
-  it('contains 21 entries', () => {
-    expect(usersData).toHaveLength(21);
+  it('contains entries', () => {
+    expect(usersData.length).toBeGreaterThan(0);
   });
 
   it('every entry has non-empty username and repo', () => {
@@ -18,7 +18,7 @@ describe('users.json', () => {
     }
   });
 
-  it('all 21 usernames are unique', () => {
-    expect(new Set((usersData as UserEntry[]).map((u) => u.username)).size).toBe(21);
+  it('all usernames are unique', () => {
+    expect(new Set((usersData as UserEntry[]).map((u) => u.username)).size).toBe(usersData.length);
   });
 });

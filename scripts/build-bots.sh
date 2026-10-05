@@ -228,13 +228,13 @@ main() {
     mkdir -p "$FORKS_DIR"
     mkdir -p "$BOTS_OUTPUT_DIR"
 
-    # Corpus: discover forks live, fall back to users.json on failure
+    # Corpus: use users.json (or live forks if USE_LIVE_FORKS=1)
     local corpus=""
     local source=""
-    if corpus="$(fetch_forks)"; then
+    if [ "${USE_LIVE_FORKS:-0}" -eq 1 ] && corpus="$(fetch_forks)"; then
         source="GitHub forks"
     else
-        warn "Falling back to users.json"
+        log "Loading entries from users.json"
         corpus="$(node -e "const u=require('${USERS_FILE}'); for(const e of u) console.log(e.username+'|'+e.repo)")"
         source="users.json"
     fi

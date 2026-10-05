@@ -40,6 +40,8 @@ export interface MatchOptions {
   isStopped?: () => boolean;
   /** Called on every board update (and once at match start). */
   onProgress?: (progress: MatchProgress) => void;
+  /** Delay in milliseconds between moves (defaults to MOVE_DELAY_MS = 300). Set to 0 for fast headless mode. */
+  moveDelayMs?: number;
 }
 
 export function workerRequest(worker: Worker, msg: { type: 'load'; botUrl: string }, expect: 'ready', timeoutMs: number): Promise<{ type: 'ready' }>;
@@ -84,7 +86,7 @@ export async function runSingleMatch(
   boardString: string,
   options: MatchOptions = {}
 ): Promise<MatchOutcome> {
-  const { isStopped, onProgress } = options;
+  const { isStopped, onProgress, moveDelayMs = MOVE_DELAY_MS } = options;
   const moves: ArenaMove[] = [];
   let error: string | null = null;
   let winner: WinnerInfo | null = null;
@@ -195,7 +197,9 @@ export async function runSingleMatch(
         break;
       }
 
-      await new Promise((r) => setTimeout(r, MOVE_DELAY_MS));
+      if (moveDelayMs > 0) {
+        await new Promise((r) => setTimeout(r, moveDelayMs));
+      }
     }
 
     if (!(isStopped?.() ?? false) && !winner) {
