@@ -547,6 +547,10 @@ async function main() {
 
   console.log('#### Building projects... ####');
   for (const user of users) {
+    if (buildFailures.includes(user.username)) {
+      console.log(`Skipping build for ${user.username} (configuration failed)`);
+      continue;
+    }
     console.log("Building " + user.username);
     try {
       execSync(`cd repos/${user.username} && cmake --build build --target catchthecat --parallel ${parallelJobs}`, { stdio: 'inherit' });
