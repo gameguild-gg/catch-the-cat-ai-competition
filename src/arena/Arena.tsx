@@ -75,6 +75,8 @@ export function Arena() {
   const [entrantFilter, setEntrantFilter] = useState<'all' | 'current' | 'selected'>('all');
   const [bracketTab, setBracketTab] = useState<BracketTab>('all');
 
+  const isFirefox = useMemo(() => typeof navigator !== 'undefined' && /firefox/i.test(navigator.userAgent), []);
+
   const stopRef = useRef(false);
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -658,6 +660,16 @@ export function Arena() {
               </CardHeader>
 
               <CardContent className="space-y-4">
+                {/* Firefox Performance Notice - shown only when NOT running on Firefox */}
+                {!isFirefox && (
+                  <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-800 dark:text-amber-300">
+                    <span className="text-base shrink-0">🦊</span>
+                    <div>
+                      <strong className="font-semibold">Performance Tip:</strong> Tournament simulations run faster and more reliably on <strong className="font-semibold underline">Mozilla Firefox</strong> due to its optimized WebAssembly memory engine.
+                    </div>
+                  </div>
+                )}
+
                 {/* Entrants Selector Panel */}
                 <div className="space-y-2 rounded-lg border p-3 bg-muted/20">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2 border-b">
