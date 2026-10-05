@@ -11,6 +11,7 @@ import {
   MOVE_DELAY_MS,
   runSingleMatch,
   WinnerInfo,
+  defaultWorkerPool,
 } from './match';
 import {
   TournamentFormat,
@@ -201,6 +202,7 @@ export function Arena() {
     stopRef.current = false;
 
     const delayMs = speedMode === 'fast' ? 0 : 100;
+    const tournamentWorkers = defaultWorkerPool.getWorkers();
 
     console.log(`[Arena] Starting ${format} tournament with ${entrants.length} entrants (speed=${speedMode})`);
     try {
@@ -222,6 +224,7 @@ export function Arena() {
           const outcome = await runSingleMatch(cat, catcher, boardString, {
             isStopped: () => stopRef.current,
             moveDelayMs: delayMs,
+            workers: tournamentWorkers,
             onProgress: (progress) => {
               if (speedMode === 'normal') {
                 setDisplayBoard(progress.board);
@@ -268,6 +271,7 @@ export function Arena() {
           const outcome1 = await runSingleMatch(botA, botB, boardString, {
             isStopped: () => stopRef.current,
             moveDelayMs: delayMs,
+            workers: tournamentWorkers,
             onProgress: (progress) => {
               if (speedMode === 'normal') {
                 setDisplayBoard(progress.board);
@@ -293,6 +297,7 @@ export function Arena() {
           const outcome2 = await runSingleMatch(botB, botA, boardString, {
             isStopped: () => stopRef.current,
             moveDelayMs: delayMs,
+            workers: tournamentWorkers,
             onProgress: (progress) => {
               if (speedMode === 'normal') {
                 setDisplayBoard(progress.board);
@@ -362,6 +367,7 @@ export function Arena() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       console.log('[Arena] Tournament finished/stopped');
+      defaultWorkerPool.reset();
       setTournamentRunning(false);
     }
   }, [bots, selectedBots, format, boardString, moveLimit, speedMode, appendLog]);

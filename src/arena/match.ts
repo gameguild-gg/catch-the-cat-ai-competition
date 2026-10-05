@@ -42,7 +42,53 @@ export interface MatchOptions {
   onProgress?: (progress: MatchProgress) => void;
   /** Delay in milliseconds between moves (defaults to MOVE_DELAY_MS = 300). Set to 0 for fast headless mode. */
   moveDelayMs?: number;
+  /** Optional pre-allocated workers pair to avoid spawning new threads per match */
+  workers?: [Worker, Worker];
 }
+
+export class ArenaWorkerPool {
+  private worker1: Worker | null = null;
+  private worker2: Worker | null = null;
+
+  getWorkers(): [Worker, Worker] {
+    if (!this.worker1) {
+      this.worker1 = new Worker(new URL('./arena.worker.ts', import.meta.url), { type: 'module' });
+    }
+    if (!this.worker2) {
+      this.worker2 = new Worker(new URL('./arena.worker.ts', import.meta.url), { type: 'module' });
+    }
+    return [this.worker1, this.worker2];
+  }
+
+  replaceWorker1(): Worker {
+    if (this.worker1) {
+      try { this.worker1.terminate(); } catch {}
+    }
+    this.worker1 = new Worker(new URL('./arena.worker.ts', import.meta.url), { type: 'module' });
+    return this.worker1;
+  }
+
+  replaceWorker2(): Worker {
+    if (this.worker2) {
+      try { this.worker2.terminate(); } catch {}
+    }
+    this.worker2 = new Worker(new URL('./arena.worker.ts', import.meta.url), { type: 'module' });
+    return this.worker2;
+  }
+
+  reset() {
+    if (this.worker1) {
+      try { this.worker1.terminate(); } catch {}
+      this.worker1 = null;
+    }
+    if (this.worker2) {
+      try { this.worker2.terminate(); } catch {}
+      this.worker2 = null;
+    }
+  }
+}
+
+export const defaultWorkerPool = new ArenaWorkerPool();
 
 export function workerRequest(worker: Worker, msg: { type: 'load'; botUrl: string }, expect: 'ready', timeoutMs: number): Promise<{ type: 'ready' }>;
 export function workerRequest(worker: Worker, msg: { type: 'move'; turn: 'cat' | 'catcher'; size: number; board: string }, expect: 'result', timeoutMs: number): Promise<{ type: 'result'; move: { x: number; y: number }; timeUs: number }>;
@@ -96,8 +142,8 @@ export async function runSingleMatch(
 
   console.log(`[runSingleMatch Start] ${catBot} (cat) vs ${catcherBot} (catcher)`);
 
-  const catWorker = new Worker(new URL('./arena.worker.ts', import.meta.url), { type: 'module' });
-  const catcherWorker = new Worker(new URL('./arena.worker.ts', import.meta.url), { type: 'module' });
+  const isTemporaryWorkers = !options.workers;
+  const [catWorker, catcherWorker] = options.workers ?? defaultWorkerPool.getWorkers();
 
   const emit = (board: Board) => {
     onProgress?.({
@@ -214,8 +260,10 @@ export async function runSingleMatch(
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   } finally {
-    catWorker.terminate();
-    catcherWorker.terminate();
+    if (isTemporaryWorkers) {
+      try { catWorker.terminate(); } catch {}
+      try { catcherWorker.terminate(); } catch {}
+    }
   }
 
   return { winner, moves, error };

@@ -24,6 +24,7 @@ type OutMsg =
   | { type: 'result'; move: { x: number; y: number }; timeUs: number }
   | { type: 'error'; message: string };
 
+let currentBotUrl: string | null = null;
 let factory: BotFactory | null = null;
 let botInstance: BotModule | null = null;
 const outLines: string[] = [];
@@ -44,8 +45,17 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
   const msg = e.data;
 
   if (msg.type === 'load') {
+    if (currentBotUrl === msg.botUrl && botInstance) {
+      post({ type: 'ready' });
+      return;
+    }
+
     try {
       console.log(`[arena.worker] Loading bot WASM module: ${msg.botUrl}`);
+      currentBotUrl = msg.botUrl;
+      factory = null;
+      botInstance = null;
+
       // Dynamically import the Emscripten ES6 module
       const mod = await import(/* @vite-ignore */ msg.botUrl);
       factory = mod.default as BotFactory;
@@ -60,6 +70,9 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
       console.log(`[arena.worker] Successfully initialized bot module: ${msg.botUrl}`);
       post({ type: 'ready' });
     } catch (err: unknown) {
+      currentBotUrl = null;
+      botInstance = null;
+      factory = null;
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[arena.worker] Failed to load bot (${msg.botUrl}):`, err);
       post({ type: 'error', message: `Failed to load bot: ${message}` });
