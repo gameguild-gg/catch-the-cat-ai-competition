@@ -94,6 +94,8 @@ jobs:
 
     - name: Build bot WASM modules
       timeout-minutes: 30
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         if [ ! -d emsdk ]; then
           git clone https://github.com/emscripten-core/emsdk.git emsdk

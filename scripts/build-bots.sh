@@ -228,19 +228,39 @@ main() {
     mkdir -p "$FORKS_DIR"
     mkdir -p "$BOTS_OUTPUT_DIR"
 
-    # Corpus: use users.json (or live forks if USE_LIVE_FORKS=1)
+    # Corpus: fetch live GitHub forks AND combine with users.json (deduplicated)
+    local live_corpus=""
+    local users_corpus=""
     local corpus=""
-    local source=""
-    if [ "${USE_LIVE_FORKS:-0}" -eq 1 ] && corpus="$(fetch_forks)"; then
-        source="GitHub forks"
+    local source="GitHub forks + users.json"
+
+    if live_corpus="$(fetch_forks 2>/dev/null)"; then
+        log "Discovered live GitHub forks via API"
     else
-        log "Loading entries from users.json"
-        corpus="$(node -e "const u=require('${USERS_FILE}'); for(const e of u) console.log(e.username+'|'+e.repo)")"
-        source="users.json"
+        warn "Could not fetch live GitHub forks via API (offline or rate-limited); using users.json"
     fi
+
+    if [ -f "$USERS_FILE" ]; then
+        users_corpus="$(node -e "const u=require('${USERS_FILE}'); for(const e of u) console.log(e.username+'|'+e.repo)")"
+    fi
+
+    # Combine live GitHub forks and users.json, deduplicating by username (first occurrence wins)
+    corpus="$(printf '%s\n%s\n' "${live_corpus}" "${users_corpus}" | node -e '
+        const fs = require("fs");
+        const lines = fs.readFileSync(0, "utf8").split("\n").filter(Boolean);
+        const seen = new Set();
+        for (const line of lines) {
+            const [user] = line.split("|");
+            if (user && !seen.has(user)) {
+                seen.add(user);
+                console.log(line);
+            }
+        }
+    ')"
+
     local total
     total="$(printf '%s\n' "$corpus" | grep -c . || true)"
-    log "Loaded ${total} entries from ${source}"
+    log "Loaded ${total} total fork entries for WASM build (${source})"
 
     # ONLY filter (comma-separated usernames)
     local -a usernames=()
