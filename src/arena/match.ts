@@ -55,13 +55,16 @@ export function workerRequest(
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       worker.removeEventListener('message', onMsg);
-      reject(new Error(`Timeout after ${timeoutMs}ms waiting for '${expect}'`));
+      const err = new Error(`Timeout after ${timeoutMs}ms waiting for '${expect}'`);
+      console.warn('[workerRequest Timeout]', err.message, 'Payload:', msg);
+      reject(err);
     }, timeoutMs);
     const onMsg = (e: MessageEvent<WorkerReply>) => {
       const d = e.data;
       if (d.type === 'error') {
         clearTimeout(timer);
         worker.removeEventListener('message', onMsg);
+        console.warn('[workerRequest Error Reply]', d.message, 'Payload:', msg);
         reject(new Error(d.message));
         return;
       }
@@ -90,6 +93,8 @@ export async function runSingleMatch(
   const moves: ArenaMove[] = [];
   let error: string | null = null;
   let winner: WinnerInfo | null = null;
+
+  console.log(`[runSingleMatch Start] ${catBot} (cat) vs ${catcherBot} (catcher)`);
 
   const catWorker = new Worker(new URL('./arena.worker.ts', import.meta.url), { type: 'module' });
   const catcherWorker = new Worker(new URL('./arena.worker.ts', import.meta.url), { type: 'module' });
@@ -143,6 +148,7 @@ export async function runSingleMatch(
       }
 
       if (failure || !result) {
+        console.warn(`[runSingleMatch Failure] ${username} (${board.turn}) failed: ${failure}`);
         moves.push({
           n: moveCount + 1,
           username,

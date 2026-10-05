@@ -129,6 +129,7 @@ export function Arena() {
 
   const runMatch = useCallback(async () => {
     if (!catBot || !catcherBot || catBot === catcherBot) return;
+    console.log(`[Arena] Initiating single match: ${catBot} (cat) vs ${catcherBot} (catcher)`);
     setRunning(true);
     setError(null);
     setWinner(null);
@@ -145,8 +146,14 @@ export function Arena() {
       },
     });
 
-    if (outcome.error) setError(outcome.error);
-    if (!stopRef.current) setWinner(outcome.winner);
+    if (outcome.error) {
+      console.error(`[Arena] Single match error (${catBot} vs ${catcherBot}):`, outcome.error);
+      setError(outcome.error);
+    }
+    if (!stopRef.current) {
+      console.log(`[Arena] Single match result:`, outcome.winner);
+      setWinner(outcome.winner);
+    }
 
     setRunning(false);
   }, [catBot, catcherBot, boardString]);
@@ -195,6 +202,7 @@ export function Arena() {
 
     const delayMs = speedMode === 'fast' ? 0 : 100;
 
+    console.log(`[Arena] Starting ${format} tournament with ${entrants.length} entrants (speed=${speedMode})`);
     try {
       if (format === 'round-robin') {
         const pairings = roundRobinPairings(entrants);
@@ -350,8 +358,10 @@ export function Arena() {
         setProgressPercent(100);
       }
     } catch (e) {
+      console.error('[Arena] Tournament execution error:', e);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
+      console.log('[Arena] Tournament finished/stopped');
       setTournamentRunning(false);
     }
   }, [bots, selectedBots, format, boardString, moveLimit, speedMode, appendLog]);
