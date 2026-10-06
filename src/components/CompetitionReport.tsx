@@ -429,33 +429,35 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
   const totalPages = Math.ceil(filteredMatches.length / matchesPerPage);
 
   const loadReport = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Use setTimeout to make the processing async and show loading state
-      setTimeout(() => {
-        try {
-          // Check if the data is in optimized format (has 'users' array)
-          const rawData = competitionReportData as any;
-          if (rawData.users && Array.isArray(rawData.users)) {
-            // Decompress optimized format
-            const decompressedReport = deoptimizeCompetitionReport(rawData);
-            setReport(decompressedReport);
-          } else {
-            // Data is already in original format
-            setReport(rawData as CompetitionReport);
-          }
-          setLoading(false);
-        } catch (err) {
+    let isMounted = true;
+    setLoading(true);
+    setError(null);
+    const timer = setTimeout(() => {
+      if (!isMounted) return;
+      try {
+        // Check if the data is in optimized format (has 'users' array)
+        const rawData = competitionReportData as any;
+        if (rawData.users && Array.isArray(rawData.users)) {
+          // Decompress optimized format
+          const decompressedReport = deoptimizeCompetitionReport(rawData);
+          setReport(decompressedReport);
+        } else {
+          // Data is already in original format
+          setReport(rawData as CompetitionReport);
+        }
+        setLoading(false);
+      } catch (err) {
+        if (isMounted) {
           setError(err instanceof Error ? err.message : 'Failed to load report');
           setLoading(false);
         }
-      }, 10); // Small delay to show loading state
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load report');
-      setLoading(false);
-    }
+      }
+    }, 10);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
   }, []);
 
   const handleWebArchive = useCallback(() => {

@@ -42,3 +42,5 @@ src/buildTimestamp.ts
 /emsdk
 /public/bots
 /forks-native
+
+.omo/
