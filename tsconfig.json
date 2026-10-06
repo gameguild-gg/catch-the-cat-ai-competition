@@ -21,6 +21,7 @@
     "generateReport.ts",
     "users.json",
     "vite.config.ts",
+    "scripts/fetch-forks.ts",
     "scripts/generate-build-timestamp.js"
   ]
 }

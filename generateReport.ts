@@ -3,7 +3,6 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { Board, MatchReport, Position, Turn, MoveReport, UserScore, CompetitionReport } from './src/board';
-import usersData from './users.json';
 
 // Track active child processes for cleanup
 
@@ -26,7 +25,6 @@ export class UserRepository {
   username: string = '';
   repo: string = '';
 }
-
 export let users: UserRepository[] = [{
     username: 'ColinSkaarup',
     repo: 'https://github.com/ColinSkaarup/mobagen',
@@ -42,6 +40,18 @@ export let users: UserRepository[] = [{
 {
   username: "JordanCoolbeth",
   repo: "https://github.com/dewdrop-ripple/GPR-340-mobagen.git"
+},
+{
+  username: "RafaSolis",
+  repo: "https://github.com/solunabeeboo/mobagen"
+},
+{
+  username: "SelinaFunk",
+  repo: "https://github.com/Selina-Funk/mobagen"
+},
+{
+  username: "omanchek",
+  repo: "https://github.com/omanchek/mobagen-gpr340.git"
 }
 ];
 
@@ -513,15 +523,41 @@ async function writeOptimizedReportStream(report: CompetitionReport, filePath: s
 }
 
 async function main() {
-  // clone all users to folder repos
-  console.log('#### Cloning repositories... ####');
+  // clone all users to folder repos and overlay headless CMake project
+  console.log('#### Cloning and overlaying headless build configurations... ####');
   for (const user of users) {
+    const userRepoDir = path.join('repos', user.username);
     console.log(`Cloning ${user.username}...`);
-    // if the folder repos/username does not exist, clone the repo
-    if (!fs.existsSync(`repos/${user.username}`))
-      execSync(`git clone ${user.repo} repos/${user.username}`, { stdio: 'inherit' });
-    else // else pull the latest changes and reset any local changes
-      execSync(`cd repos/${user.username} && git reset --hard && git pull`, { stdio: 'inherit' });
+    if (!fs.existsSync(userRepoDir)) {
+      execSync(`git clone ${user.repo} ${userRepoDir}`, { stdio: 'inherit' });
+    } else {
+      execSync(`cd ${userRepoDir} && git reset --hard && git pull`, { stdio: 'inherit' });
+    }
+
+    // Bridge legacy layout if needed (examples/catchthecat)
+    const isLegacy = fs.existsSync(path.join(userRepoDir, 'examples', 'catchthecat', 'World.h'));
+    if (isLegacy) {
+      fs.mkdirSync(path.join(userRepoDir, 'apps'), { recursive: true });
+      execSync(`cp -R ${path.join(userRepoDir, 'examples', 'catchthecat')} ${path.join(userRepoDir, 'apps', 'catchthecat')}`);
+      try {
+        fs.symlinkSync('.', path.join(userRepoDir, 'core', 'sources'), 'dir');
+      } catch {}
+      const wh = path.join(userRepoDir, 'apps', 'catchthecat', 'World.h');
+      const wc = path.join(userRepoDir, 'apps', 'catchthecat', 'World.cpp');
+      if (fs.existsSync(wh)) {
+        execSync(`perl -pi -e 's/#include "scene\\/GameObject\\.h"\\n//; s/^#include "SDL[^"]*\\.h"\\n//; s/^class World : GameObject \\{/class World \\{/; s/.*void OnDraw\\(SDL_Renderer\\* renderer\\) override;\\n//; s/.*void OnGui\\(ImGuiContext\\* context\\) override;\\n//; s/.*void Update\\(float deltaTime\\) override;\\n//; s/World\\(Engine\\* pEngine, int size = 11\\)/World\\(int size = 11\\)/; s/World\\(Engine\\* pEngine, int mapSideSize/World\\(int mapSideSize/;' "${wh}"`);
+        fs.appendFileSync(wh, '\n// wasm-arena bridge alias\nusing CatWorld = World;\n');
+      }
+      if (fs.existsSync(wc)) {
+        execSync(`perl -pi -e 's/#include "Polygon\\.h"\\n//; s/#include "scene\\/Transform\\.h"\\n//; s/#include "engine\\/Engine\\.h"\\n//; s/^#include "SDL[^"]*\\.h"\\n//; s/World::World\\(Engine\\* pEngine, int size\\) : GameObject\\(pEngine\\), /World::World\\(int size\\) : /; s/World::World\\(Engine\\* pEngine, int mapSideSize, bool isCatTurn, Point2D catPos, std::vector<bool> map\\)/World::World\\(int mapSideSize, bool isCatTurn, Point2D catPos, std::vector<bool> map\\)/; s/    : GameObject\\(pEngine\\), sideSize\\(mapSideSize\\)/    : sideSize\\(mapSideSize\\)/;' "${wc}"`);
+      }
+    }
+
+    // Overlay lightweight headless CMake configuration (omits Dawn, SDL3, WebGPU, ImGui)
+    fs.copyFileSync(path.join('wasm', 'wasm_main.cpp'), path.join(userRepoDir, 'wasm_main.cpp'));
+    fs.copyFileSync(path.join('scripts', 'CMakeLists.headless.txt'), path.join(userRepoDir, 'CMakeLists.txt'));
+    fs.mkdirSync(path.join(userRepoDir, 'cmake'), { recursive: true });
+    fs.copyFileSync(path.join('wasm', 'get_cpm.cmake'), path.join(userRepoDir, 'cmake', 'get_cpm.cmake'));
   }
 
   // Create shared deps folder if it doesn't exist
@@ -534,6 +570,12 @@ async function main() {
   const parallelJobs = getOptimalParallelJobs();
   console.log(`Using ${parallelJobs} parallel jobs for compilation (detected ${os.cpus().length} CPU cores)`);
 
+  const buildFailures: string[] = [];
+  const recordFailure = (user: UserRepository, stage: string, error: unknown) => {
+    console.error(`❌ ${stage} failed for ${user.username}: ${error instanceof Error ? error.message : String(error)}`);
+    if (!buildFailures.includes(user.username)) buildFailures.push(user.username);
+  };
+
   console.log('#### Configuring projects... ####');
   // run cmake configure and build the executable target catchthecat
   for (const user of users) {
@@ -541,22 +583,34 @@ async function main() {
     try {
       execSync(`cd repos/${user.username} && cmake -B build -DCPM_SOURCE_CACHE=${depsDir}`, { stdio: 'inherit' });
     } catch (error) {
-      console.log(`❌ Configuration failed for ${user.username}: ${error}`);
+      recordFailure(user, 'Configuration', error);
     }
   }
 
   console.log('#### Building projects... ####');
   for (const user of users) {
+    if (buildFailures.includes(user.username)) {
+      console.log(`Skipping build for ${user.username} (configuration failed)`);
+      continue;
+    }
     console.log("Building " + user.username);
     try {
       execSync(`cd repos/${user.username} && cmake --build build --target catchthecat --parallel ${parallelJobs}`, { stdio: 'inherit' });
     } catch (error) {
-      console.log(`❌ Build failed for ${user.username}: ${error}`);
+      recordFailure(user, 'Build', error);
     }
   }
 
   // leave only the users that have a valid compilation
   users = users.filter(user => fs.existsSync(`repos/${user.username}/build/bin/catchthecat`));
+
+  if (buildFailures.length > 0) {
+    console.warn(`⚠️ ${buildFailures.length} bot(s) failed to configure/build: ${buildFailures.join(', ')}`);
+  }
+  console.log(`#### ${users.length}/${users.length + buildFailures.length} bots built successfully ####`);
+  if (users.length === 0) {
+    throw new Error('No bots built successfully — refusing to write an empty competition report.');
+  }
 
   console.log('#### Generating random boards... ####');
   // generate 8 unique random boards using an array (avoid Set to reduce cost)

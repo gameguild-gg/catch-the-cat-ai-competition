@@ -24,7 +24,9 @@ type OutMsg =
   | { type: 'result'; move: { x: number; y: number }; timeUs: number }
   | { type: 'error'; message: string };
 
+let currentBotUrl: string | null = null;
 let factory: BotFactory | null = null;
+let botInstance: BotModule | null = null;
 const outLines: string[] = [];
 
 function post(msg: OutMsg): void {
@@ -43,22 +45,64 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
   const msg = e.data;
 
   if (msg.type === 'load') {
+    if (currentBotUrl === msg.botUrl && botInstance) {
+      post({ type: 'ready' });
+      return;
+    }
+
     try {
+      console.log(`[arena.worker] Loading bot WASM module: ${msg.botUrl}`);
+      currentBotUrl = msg.botUrl;
+      factory = null;
+      botInstance = null;
+
       // Dynamically import the Emscripten ES6 module
       const mod = await import(/* @vite-ignore */ msg.botUrl);
       factory = mod.default as BotFactory;
+      botInstance = await factory({
+        print: (t: string) => {
+          if (outLines.length < 500) outLines.push(t);
+        },
+        printErr: (t: string) => {
+          console.warn(`[bot stderr (${msg.botUrl})]`, t);
+        },
+      });
+      console.log(`[arena.worker] Successfully initialized bot module: ${msg.botUrl}`);
       post({ type: 'ready' });
     } catch (err: unknown) {
+      currentBotUrl = null;
+      botInstance = null;
+      factory = null;
       const message = err instanceof Error ? err.message : String(err);
+      console.error(`[arena.worker] Failed to load bot (${msg.botUrl}):`, err);
       post({ type: 'error', message: `Failed to load bot: ${message}` });
     }
     return;
   }
 
   if (msg.type === 'move') {
-    if (!factory) {
-      post({ type: 'error', message: 'Bot not loaded' });
-      return;
+    if (!botInstance) {
+      if (factory) {
+        try {
+          botInstance = await factory({
+            print: (t: string) => {
+              if (outLines.length < 500) outLines.push(t);
+            },
+            printErr: (t: string) => {
+              console.warn(`[bot stderr]`, t);
+            },
+          });
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error('[arena.worker] Failed to instantiate bot module:', err);
+          post({ type: 'error', message: `Failed to instantiate bot: ${message}` });
+          return;
+        }
+      } else {
+        console.error('[arena.worker] Move requested before bot was loaded');
+        post({ type: 'error', message: 'Bot not loaded' });
+        return;
+      }
     }
 
     // callMain() prepends the program name itself (argv[0]), so pass only real args.
@@ -73,25 +117,12 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
     ];
     outLines.length = 0;
 
-    let bot: BotModule;
     try {
-      bot = await factory({
-        print: (t: string) => outLines.push(t),
-        printErr: () => {},
-      });
+      botInstance.callMain(argv);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      post({ type: 'error', message: `Failed to load bot: ${message}` });
-      return;
-    }
-
-    try {
-      bot.callMain(argv);
-    } catch (err: unknown) {
-      // EXIT_RUNTIME=1: first callMain may still throw ExitStatus(0) after
-      // printing. Swallow it; nonzero exit is a real failure.
       if (!isExitStatus(err)) {
         const message = err instanceof Error ? err.message : String(err);
+        console.error(`[arena.worker] Bot callMain runtime exception (${msg.turn}):`, err);
         post({ type: 'error', message: `Bot execution error: ${message}` });
         return;
       }
@@ -102,6 +133,7 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
       post({ type: 'result', move: result.move, timeUs: result.timeUs });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
+      console.error(`[arena.worker] Failed to parse bot output (${msg.turn}):`, message, '\nOutput sample:', outLines.slice(0, 10).join('\n'));
       post({ type: 'error', message: `Failed to parse bot output: ${message}` });
     }
   }

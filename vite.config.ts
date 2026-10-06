@@ -33,6 +33,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/setupTests.ts',
-    exclude: ['**/node_modules/**', '**/dist/**', 'emsdk/**', 'forks/**', 'forks-native/**'],
+    include: ['src/**/*.{test,spec}.{js,mjs,ts,mts,jsx,tsx}'],
+    exclude: ['**/node_modules/**', '**/dist/**', 'emsdk/**', 'forks/**', 'forks-native/**', 'deps/**'],
   },
 });
