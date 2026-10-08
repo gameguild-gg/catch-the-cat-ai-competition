@@ -439,8 +439,8 @@ function optimizeCompetitionReport(report: CompetitionReport): any {
     }
   }));
 
-  // Optimize high scores (limit to top 10 to protect underperforming students)
-  const optimizedHighScores = report.highScores.slice(0, 10).map(score => ({
+  // Optimize high scores (limit to top 5 to protect underperforming students)
+  const optimizedHighScores = report.highScores.slice(0, 5).map(score => ({
     u: userMap.get(score.username),
     cms: score.catMoveScore,
     chs: score.catcherMoveScore,
@@ -512,7 +512,7 @@ async function writeOptimizedReportStream(report: CompetitionReport, filePath: s
 
     stream.write('],"highScores":');
 
-    const optimizedHighScores = report.highScores.slice(0, 10).map(score => ({
+    const optimizedHighScores = report.highScores.slice(0, 5).map(score => ({
       u: userMap.get(score.username),
       cms: score.catMoveScore,
       chs: score.catcherMoveScore,
@@ -671,12 +671,12 @@ async function main() {
     return bMoves - aMoves;
   });
 
-  // Determine top-10 users and partition matches
-  const top10 = new Set(userScores.slice(0, 10).map(s => s.username));
+  // Determine top-5 users and partition matches
+  const top5 = new Set(userScores.slice(0, 5).map(s => s.username));
   const visibleMatches: MatchReport[] = [];
   const protectedMatches: MatchReport[] = [];
   for (const m of sortedMatches) {
-    if (!top10.has(m.cat) || !top10.has(m.catcher)) {
+    if (!top5.has(m.cat) || !top5.has(m.catcher)) {
       protectedMatches.push(m);
     } else {
       visibleMatches.push(m);
@@ -693,7 +693,7 @@ async function main() {
   
   const competitionReport = new CompetitionReport();
   competitionReport.matches = finalMatches;
-  competitionReport.highScores = userScores.slice(0, 10);
+  competitionReport.highScores = userScores.slice(0, 5);
   
   // Generate optimized JSON report for further analysis
   // const optimizedReport = optimizeCompetitionReport(competitionReport);

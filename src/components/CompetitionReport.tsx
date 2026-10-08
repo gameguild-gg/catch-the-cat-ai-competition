@@ -605,7 +605,7 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
                 </TableRow>
               </TableHeader>
             <TableBody>
-              {sortedScores.slice(0, 10).map((score, index) => (
+              {sortedScores.slice(0, 5).map((score, index) => (
                 <TableRow key={score.username}>
                   <TableCell className="font-medium">
                     {index === 0 ? (
