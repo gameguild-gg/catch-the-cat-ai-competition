@@ -104,13 +104,6 @@ export function Arena() {
       .catch(() => setBots([]));
   }, []);
 
-  // Auto-scroll match log to bottom
-  useEffect(() => {
-    if (tournamentLog.length > 0 && logEndRef.current) {
-      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [tournamentLog.length]);
-
   const loadBoard = useCallback(() => {
     const text = boardText.trim();
     if (!/^[.#C]{441}$/.test(text) || (text.match(/C/g) || []).length !== 1) {
