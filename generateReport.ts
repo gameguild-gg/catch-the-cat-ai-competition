@@ -60,6 +60,10 @@ export let users: UserRepository[] = [{
 {
   username: "dpami507",
   repo: "https://github.com/dpami507/mobagen"
+},
+{
+  username: "mcacejr",
+  repo: "https://github.com/McAceJr/mobagen-gpr340.git"
 }
 ];
 
