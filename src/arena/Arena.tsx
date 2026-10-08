@@ -32,7 +32,6 @@ import {
 import { SEASON_USERS } from '../season';
 
 const CURRENT_SEASON_BOTS = new Set(SEASON_USERS.map((u) => u.username));
-const DEFAULT_MOVE_LIMIT = 600;
 const MAX_LOG_ENTRIES = 200;
 
 type Mode = 'single' | 'tournament';
@@ -61,7 +60,6 @@ export function Arena() {
   // Tournament state
   const [selectedBots, setSelectedBots] = useState<string[]>([]);
   const [format, setFormat] = useState<TournamentFormat>('round-robin');
-  const [moveLimit, setMoveLimit] = useState(DEFAULT_MOVE_LIMIT);
   const [speedMode, setSpeedMode] = useState<SpeedMode>('fast');
   const [tournamentRunning, setTournamentRunning] = useState(false);
   const [rrStandings, setRrStandings] = useState<Standing[]>([]);
@@ -209,7 +207,7 @@ export function Arena() {
         let standings = createStandings(entrants);
         setRrStandings(standings);
 
-        const limit = Math.min(pairings.length, moveLimit);
+        const limit = pairings.length;
         for (let i = 0; i < limit; i += 1) {
           if (stopRef.current) break;
           const { cat, catcher } = pairings[i];
@@ -367,7 +365,7 @@ export function Arena() {
       defaultWorkerPool.reset();
       setTournamentRunning(false);
     }
-  }, [bots, selectedBots, format, boardString, moveLimit, speedMode, appendLog]);
+  }, [bots, selectedBots, format, boardString, speedMode, appendLog]);
 
   const boardForDisplay = displayBoard ?? boardString;
 
@@ -813,16 +811,10 @@ export function Arena() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold">Max Matches</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={1000}
-                      className="w-full p-1.5 text-xs rounded border bg-background"
-                      value={moveLimit}
-                      onChange={(e) => setMoveLimit(Math.max(1, Number(e.target.value) || 1))}
-                      disabled={tournamentRunning}
-                    />
+                    <label className="text-xs font-semibold">Entrants</label>
+                    <div className="text-xs text-muted-foreground p-1.5 border rounded bg-muted/30">
+                      {selectedBots.length} selected — {format === 'round-robin' ? `${(selectedBots.length * (selectedBots.length - 1)) / 2}` : 'bracket'} matches
+                    </div>
                   </div>
                 </div>
 

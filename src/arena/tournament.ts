@@ -65,7 +65,9 @@ export interface RoundRobinPairing {
 
 /**
  * Single round-robin: every unordered pair meets exactly once, with the cat
- * role alternated so the asymmetric roles stay balanced.
+ * role alternated so the asymmetric roles stay balanced. The pairing order is
+ * scrambled so standings evolve across all bots instead of running one bot's
+ * full schedule first.
  */
 export function roundRobinPairings(bots: string[]): RoundRobinPairing[] {
   const pairings: RoundRobinPairing[] = [];
@@ -78,7 +80,7 @@ export function roundRobinPairings(bots: string[]): RoundRobinPairing[] {
       });
     }
   }
-  return pairings;
+  return shuffle(pairings);
 }
 
 export interface Standing {

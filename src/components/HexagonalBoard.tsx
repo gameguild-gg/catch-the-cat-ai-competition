@@ -3,9 +3,11 @@ interface HexagonalBoardProps {
   boardString: string;
   catPosition: { x: number; y: number };
   side?: number;
+  onCellClick?: (x: number, y: number) => void;
+  highlightCells?: Set<string>;
 }
 
-export function HexagonalBoard({ boardString, catPosition, side = 21 }: HexagonalBoardProps) {
+export function HexagonalBoard({ boardString, catPosition, side = 21, onCellClick, highlightCells }: HexagonalBoardProps) {
   const sideSideOver2 = Math.floor(side / 2);
   const hexSize = 18; // Increased size of each hexagon
   const hexWidth = hexSize * Math.sqrt(3); // Width for flat-top hexagons
@@ -72,6 +74,14 @@ export function HexagonalBoard({ boardString, catPosition, side = 21 }: Hexagona
         strokeWidth = 3;
       }
 
+      const isHighlighted = isEmpty && highlightCells !== undefined && highlightCells.has(`${x},${y}`);
+
+      if (isHighlighted) {
+        fillColor = '#fbbf24';
+        strokeColor = '#d97706';
+        strokeWidth = 2;
+      }
+
       hexagons.push(
         <g key={`hex-${x}-${y}`} className="hexagon-cell group">
           <path
@@ -79,6 +89,7 @@ export function HexagonalBoard({ boardString, catPosition, side = 21 }: Hexagona
             fill={fillColor}
             stroke={strokeColor}
             strokeWidth={strokeWidth}
+            onClick={isEmpty && onCellClick ? () => onCellClick(x, y) : undefined}
             className={`transition-all duration-200 ${
               isEmpty ? 'hover:fill-green-300 hover:stroke-green-600 cursor-pointer' : ''
             } ${
