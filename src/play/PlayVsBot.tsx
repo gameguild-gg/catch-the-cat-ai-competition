@@ -29,7 +29,7 @@ function hexNeighbors(p: { x: number; y: number }): { x: number; y: number }[] {
   ];
 }
 
-export function PlayVsBot() {
+export function PlayVsBot({ deepLink }: { deepLink?: { bot: string; role: Role } }) {
   const [bots, setBots] = useState<string[] | null>(null);
   const [selectedBot, setSelectedBot] = useState('');
   const [userRole, setUserRole] = useState<Role>('cat');
@@ -54,7 +54,10 @@ export function PlayVsBot() {
       .then((data) => {
         const names: string[] = (data.bots || []).map((b: { username: string }) => b.username);
         setBots(names);
-        if (names.length > 0) setSelectedBot(names[0]);
+        if (deepLink && names.includes(deepLink.bot)) {
+          setSelectedBot(deepLink.bot);
+          setUserRole(deepLink.role);
+        } else if (names.length > 0) setSelectedBot(names[0]);
       })
       .catch(() => setBots([]));
     return () => {
@@ -113,8 +116,11 @@ export function PlayVsBot() {
     }
   }, [selectedBot, userRole, logMove, syncDisplay, finishIfOver, status]);
 
-  const newGame = useCallback(async () => {
-    if (!selectedBot) return;
+  const newGame = useCallback(async (bot?: string, role?: Role) => {
+    const opponent = bot ?? selectedBot;
+    const playAs = role ?? userRole;
+    if (!opponent) return;
+    window.history.replaceState(null, '', `?${playAs === 'cat' ? 'catcher' : 'cat'}=${encodeURIComponent(opponent)}`);
     const gameId = ++gameIdRef.current;
     busyRef.current = false;
     setWinner(null);
@@ -128,14 +134,14 @@ export function PlayVsBot() {
       }
       const worker = new Worker(new URL('../arena/arena.worker.ts', import.meta.url), { type: 'module' });
       workerRef.current = worker;
-      await workerRequest(worker, { type: 'load', botUrl: `${import.meta.env.BASE_URL}bots/${selectedBot}.js` }, 'ready', MOVE_TIMEOUT_MS * 5);
+      await workerRequest(worker, { type: 'load', botUrl: `${import.meta.env.BASE_URL}bots/${opponent}.js` }, 'ready', MOVE_TIMEOUT_MS * 5);
       if (gameIdRef.current !== gameId) return;
 
-      const board = new Board(Board.generateRandomBoard(BOARD_SIZE), new Position(0, 0), userRole === 'cat' ? 'You' : selectedBot, userRole === 'cat' ? selectedBot : 'You');
+      const board = new Board(Board.generateRandomBoard(BOARD_SIZE), new Position(0, 0), playAs === 'cat' ? 'You' : opponent, playAs === 'cat' ? opponent : 'You');
       boardRef.current = board;
       syncDisplay();
       setStatus('playing');
-      if (userRole === 'catcher') {
+      if (playAs === 'catcher') {
         await botTurn(gameId);
       }
     } catch (e) {
@@ -144,6 +150,15 @@ export function PlayVsBot() {
       setError(e instanceof Error ? e.message : String(e));
     }
   }, [selectedBot, userRole, syncDisplay, botTurn]);
+
+  const didAutoStartRef = useRef(false);
+
+  useEffect(() => {
+    if (bots === null || !deepLink || didAutoStartRef.current) return;
+    if (!bots.includes(deepLink.bot)) return;
+    didAutoStartRef.current = true;
+    void newGame(deepLink.bot, deepLink.role);
+  }, [bots, deepLink, newGame]);
 
   const onCellClick = useCallback((x: number, y: number) => {
     const board = boardRef.current;
@@ -278,7 +293,7 @@ export function PlayVsBot() {
               </div>
             </div>
 
-            <Button onClick={newGame} disabled={!canStart} className="font-semibold">
+            <Button onClick={() => void newGame()} disabled={!canStart} className="font-semibold">
               {status === 'loading' ? 'Loading bot…' : 'New Game'}
             </Button>
 
