@@ -583,9 +583,9 @@ export function CompetitionReportComponent({ reportData }: CompetitionReportProp
       {/* Leaderboard */}
       <Card>
         <CardHeader>
-          <CardTitle>🥇 Top 10 Leaderboard</CardTitle>
+          <CardTitle>🥇 Top 5 Leaderboard</CardTitle>
           <CardDescription>
-            Top 8 players ranked by total score (normalized by board size with time penalties)
+            Top 5 players ranked by total score (normalized by board size with time penalties)
           </CardDescription>
         </CardHeader>
         <CardContent>
