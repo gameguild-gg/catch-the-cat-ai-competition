@@ -29,7 +29,9 @@ import {
   type TournamentMatch,
 } from './tournament';
 
-const CURRENT_SEASON_BOTS = new Set(['ColinSkaarup', 'AaronArchambault', 'lukehinojosa']);
+import { SEASON_USERS } from '../season';
+
+const CURRENT_SEASON_BOTS = new Set(SEASON_USERS.map((u) => u.username));
 const DEFAULT_MOVE_LIMIT = 600;
 const MAX_LOG_ENTRIES = 200;
 

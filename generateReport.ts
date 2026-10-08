@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { Board, MatchReport, Position, Turn, MoveReport, UserScore, CompetitionReport } from './src/board';
+import { SEASON_USERS } from './src/season';
 
 // Track active child processes for cleanup
 
@@ -25,47 +26,7 @@ export class UserRepository {
   username: string = '';
   repo: string = '';
 }
-export let users: UserRepository[] = [{
-    username: 'ColinSkaarup',
-    repo: 'https://github.com/ColinSkaarup/mobagen',
-},
-{
-  username: "AaronArchambault",
-  repo: "https://github.com/AaronArchambault/mobagen.git"
-},
-{
-  username: "lukehinojosa",
-  repo: "https://github.com/lukehinojosa/mobagen"
-},
-{
-  username: "JordanCoolbeth",
-  repo: "https://github.com/dewdrop-ripple/GPR-340-mobagen.git"
-},
-{
-  username: "RafaSolis",
-  repo: "https://github.com/solunabeeboo/mobagen"
-},
-{
-  username: "SelinaFunk",
-  repo: "https://github.com/Selina-Funk/mobagen"
-},                                    
-{
-  username: "LoganMcCandless",
-  repo: "https://github.com/Logi-Bear/mobagen"
-},
-{
-  username: "omanchek",
-  repo: "https://github.com/omanchek/mobagen-gpr340.git"
-},
-{
-  username: "dpami507",
-  repo: "https://github.com/dpami507/mobagen"
-},
-{
-  username: "mcacejr",
-  repo: "https://github.com/McAceJr/mobagen-jws"
-}
-];
+export let users: UserRepository[] = SEASON_USERS;
 
 interface MoveResult {
   move: Position | null;
@@ -612,7 +573,7 @@ async function main() {
   }
 
   // leave only the users that have a valid compilation
-  users = users.filter(user => fs.existsSync(`repos/${user.username}/build/bin/catchthecat`));
+  users = SEASON_USERS.filter(user => fs.existsSync(`repos/${user.username}/build/bin/catchthecat`));
 
   if (buildFailures.length > 0) {
     console.warn(`⚠️ ${buildFailures.length} bot(s) failed to configure/build: ${buildFailures.join(', ')}`);
