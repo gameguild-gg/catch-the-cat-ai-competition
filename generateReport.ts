@@ -236,16 +236,15 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
   report.initialState.turn = board.turn;
   let moveCount = 0;
   const maxMoves = board.side * board.side; // Maximum possible moves
-  
+
   console.log(`Running match: ${cat.username} (cat) vs ${catcher.username} (catcher)`);
-  
   while (moveCount < maxMoves) {
     const gameResult = board.getGameResult();
     if (gameResult.isOver) {
       console.log(`Game over: ${gameResult.winner} wins - ${gameResult.reason}`);
       break;
     }
-    
+
     const currentUser = board.turn === Turn.Cat ? cat : catcher;
     const moveResult = await requestMove(board, currentUser);
     
@@ -263,9 +262,9 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
       // Player made an invalid move or timed out
       moveReport.error = moveResult.error || 'Invalid move';
       report.moves.push(moveReport);
-      
+
       console.log(`${currentUser.username} (${board.turn}) failed: ${moveReport.error}`);
-      
+
       // The other player wins
       if (board.turn === Turn.Cat) {
         report.catcherMoveScore = maxMoves - moveCount; // Catcher wins = higher score
@@ -291,12 +290,11 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
       board.move(moveResult.move);
       
       moveCount++;
-      console.log(`${currentUser.username} (${moveReport.turn}) moved to (${moveResult.move.x}, ${moveResult.move.y}) in ${moveResult.time}ms`);
-      
+
     } catch (error) {
       moveReport.error = error instanceof Error ? error.message : String(error);
       console.log(`${currentUser.username} (${board.turn}) made invalid move (${moveResult.move.x}, ${moveResult.move.y}): ${error instanceof Error ? error.message : String(error)}`);
-      
+
       // Add the invalid move to the report before breaking
       report.moves.push(moveReport);
       
@@ -326,7 +324,7 @@ async function runMatch(cat: UserRepository, catcher: UserRepository, initialSta
     }
   }
   
-  console.log(`Match completed: Cat score: ${report.catMoveScore}, Catcher score: ${report.catcherMoveScore}`);
+  console.log(`Match completed: ${cat.username} (cat) vs ${catcher.username} (catcher) — Cat score: ${report.catMoveScore}, Catcher score: ${report.catcherMoveScore}`);
   return report;
 }
 
@@ -631,7 +629,6 @@ async function main() {
     const board = Board.generateRandomBoard(21);
     if (!initialStates.includes(board)) {
       initialStates.push(board);
-      console.log(`Generated board ${initialStates.length}/8`);
     }
   }
 
