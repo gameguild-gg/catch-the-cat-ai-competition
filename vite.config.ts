@@ -28,7 +28,7 @@ export default defineConfig({
       },
     },
   ],
-  base: '/catch-the-cat-ai-competition/',
+  base: './',
   test: {
     environment: 'jsdom',
     globals: true,
