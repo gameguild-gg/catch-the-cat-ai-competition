@@ -8,6 +8,13 @@ export const MOVE_TIMEOUT_MS = 2000;
 export const MOVE_DELAY_MS = 300;
 export const MAX_MOVES = BOARD_SIZE * BOARD_SIZE;
 
+// Resolve the bot module URL absolutely against the page URL. The arena worker
+// lives in /assets/, so a relative './bots/x.js' would resolve to /assets/bots/x.js (404).
+// Works for both the custom domain (root) and github.io project pages (subpath).
+export function botUrl(bot: string): string {
+  return new URL(`${import.meta.env.BASE_URL}bots/${bot}.js`, window.location.href).href;
+}
+
 export interface ArenaMove {
   n: number;
   username: string;
@@ -155,8 +162,8 @@ export async function runSingleMatch(
 
   try {
     await Promise.all([
-      workerRequest(catWorker, { type: 'load', botUrl: `${import.meta.env.BASE_URL}bots/${catBot}.js` }, 'ready', MOVE_TIMEOUT_MS * 5),
-      workerRequest(catcherWorker, { type: 'load', botUrl: `${import.meta.env.BASE_URL}bots/${catcherBot}.js` }, 'ready', MOVE_TIMEOUT_MS * 5),
+      workerRequest(catWorker, { type: 'load', botUrl: botUrl(catBot) }, 'ready', MOVE_TIMEOUT_MS * 5),
+      workerRequest(catcherWorker, { type: 'load', botUrl: botUrl(catcherBot) }, 'ready', MOVE_TIMEOUT_MS * 5),
     ]);
 
     const board = new Board(boardString, new Position(0, 0), catBot, catcherBot);

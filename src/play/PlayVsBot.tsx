@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button';
 import { Select } from '../components/ui/select';
 import { HexagonalBoard } from '../components/HexagonalBoard';
 import { Board, Position, Turn } from '../board';
-import { workerRequest, MOVE_TIMEOUT_MS, BOARD_SIZE } from '../arena/match';
+import { workerRequest, botUrl, MOVE_TIMEOUT_MS, BOARD_SIZE } from '../arena/match';
 
 type Role = 'cat' | 'catcher';
 type Status = 'idle' | 'loading' | 'playing' | 'thinking' | 'over';
@@ -134,7 +134,7 @@ export function PlayVsBot({ deepLink }: { deepLink?: { bot: string; role: Role }
       }
       const worker = new Worker(new URL('../arena/arena.worker.ts', import.meta.url), { type: 'module' });
       workerRef.current = worker;
-      await workerRequest(worker, { type: 'load', botUrl: `${import.meta.env.BASE_URL}bots/${opponent}.js` }, 'ready', MOVE_TIMEOUT_MS * 5);
+      await workerRequest(worker, { type: 'load', botUrl: botUrl(opponent) }, 'ready', MOVE_TIMEOUT_MS * 5);
       if (gameIdRef.current !== gameId) return;
 
       const board = new Board(Board.generateRandomBoard(BOARD_SIZE), new Position(0, 0), playAs === 'cat' ? 'You' : opponent, playAs === 'cat' ? opponent : 'You');
