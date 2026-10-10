@@ -552,7 +552,7 @@ async function main() {
   for (const user of users) {
     console.log("Configuring " + user.username);
     try {
-      execSync(`cd repos/${user.username} && cmake -B build -DCPM_SOURCE_CACHE=${depsDir}`, { stdio: 'inherit' });
+      execSync(`cd repos/${user.username} && cmake -B build -DCPM_SOURCE_CACHE=${depsDir} -DCMAKE_C_FLAGS=-O0 -DCMAKE_CXX_FLAGS=-O0`, { stdio: 'inherit' });
     } catch (error) {
       recordFailure(user, 'Configuration', error);
     }

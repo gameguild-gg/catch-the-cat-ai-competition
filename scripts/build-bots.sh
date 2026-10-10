@@ -197,6 +197,7 @@ compile_fork() {
         -B "$build_dir" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCAT_BOT_NAME="${username}" \
+        -DCMAKE_CXX_FLAGS="-Oz -flto" \
         2>&1 | tail -5; then
         err "  CMake configure failed for '${username}'"
         return 1
