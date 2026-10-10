@@ -586,7 +586,7 @@ async function main() {
   console.log('#### Generating random boards... ####');
   // generate 8 unique random boards using an array (avoid Set to reduce cost)
   const initialStates: string[] = [];
-  while (initialStates.length < 8) {
+  while (initialStates.length < 20) {
     const board = Board.generateRandomBoard(21);
     if (!initialStates.includes(board)) {
       initialStates.push(board);
